@@ -45,18 +45,62 @@ export const resendMFACode = createAsyncThunk("auth/resendMFACode", async () => 
   return response.data
 })
 
-export const sendResetCode = createAsyncThunk("auth/sendResetCode", async ({ email }: { email: string }) => {
-  const response = await apiClient.post("/auth/send-reset-code", { email })
-  return response.data
-})
+// Password Reset - with proper API error handling
+export const sendResetCode = createAsyncThunk(
+  "auth/sendResetCode", 
+  async ({ email }: { email: string }, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.post("/api/auth/public/password-reset", { email })
+      return response.data
+    } catch (error: any) {
+      // Handle your Spring Boot API error format
+      const errorMessage = error.response?.data?.message || 
+                          error.response?.data?.error || 
+                          error.message || 
+                          "Failed to send reset code"
+      return rejectWithValue(errorMessage)
+    }
+  }
+)
 
 export const resetPassword = createAsyncThunk(
   "auth/resetPassword",
-  async ({ email, code, newPassword }: { email: string; code: string; newPassword: string }) => {
-    const response = await apiClient.post("/auth/reset-password", { email, code, newPassword })
-    return response.data
-  },
+  async ({ email, resetCode, newPassword }: { email: string; resetCode: string; newPassword: string }, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.post("/api/auth/public/password-reset/confirm", { 
+        email, 
+        resetCode, 
+        newPassword 
+      })
+      return response.data
+    } catch (error: any) {
+      // Handle your Spring Boot API error format
+      const errorMessage = error.response?.data?.message || 
+                          error.response?.data?.error || 
+                          error.message || 
+                          "Failed to reset password"
+      return rejectWithValue(errorMessage)
+    }
+  }
 )
+
+export const resendResetCode = createAsyncThunk(
+  "auth/resendResetCode",
+  async ({ email }: { email: string }, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.post("/api/auth/public/password-reset/resend", { email })
+      return response.data
+    } catch (error: any) {
+      // Handle your Spring Boot API error format
+      const errorMessage = error.response?.data?.message || 
+                          error.response?.data?.error || 
+                          error.message || 
+                          "Failed to resend reset code"
+      return rejectWithValue(errorMessage)
+    }
+  }
+)
+// END Password Reset
 
 export const checkAuthStatus = createAsyncThunk("auth/checkAuthStatus", async () => {
   const token = localStorage.getItem("token")
@@ -135,7 +179,7 @@ const authSlice = createSlice({
         localStorage.removeItem("token")
       })
 
-      // Reset Password
+      // Reset Password - Updated with better error handling
       .addCase(sendResetCode.pending, (state) => {
         state.loading = true
         state.error = null
@@ -145,7 +189,7 @@ const authSlice = createSlice({
       })
       .addCase(sendResetCode.rejected, (state, action) => {
         state.loading = false
-        state.error = action.error.message || "Failed to send reset code"
+        state.error = action.payload as string || "Failed to send reset code"
       })
 
       .addCase(resetPassword.pending, (state) => {
@@ -157,7 +201,20 @@ const authSlice = createSlice({
       })
       .addCase(resetPassword.rejected, (state, action) => {
         state.loading = false
-        state.error = action.error.message || "Failed to reset password"
+        state.error = action.payload as string || "Failed to reset password"
+      })
+
+      // Resend Reset Code
+      .addCase(resendResetCode.pending, (state) => {
+        state.loading = true
+        state.error = null
+      })
+      .addCase(resendResetCode.fulfilled, (state) => {
+        state.loading = false
+      })
+      .addCase(resendResetCode.rejected, (state, action) => {
+        state.loading = false
+        state.error = action.payload as string || "Failed to resend reset code"
       })
   },
 })
