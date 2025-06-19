@@ -1,6 +1,5 @@
 import axios from "axios"
 
-// Confirmed port 4010 from your network tab
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4010"
 
 export const apiClient = axios.create({
@@ -8,16 +7,42 @@ export const apiClient = axios.create({
   headers: {
     "Content-Type": "application/json",
   },
-  timeout: 10000, // 10 seconds timeout
+  withCredentials: true, // IMPORTANT: Pour envoyer les cookies HTTP-Only
 })
 
-// Request interceptor to add auth token
+// Liste des endpoints publics qui ne nécessitent pas de CSRF token
+const PUBLIC_ENDPOINTS = [
+  "/api/auth/public/login",
+  "/api/auth/public/password-reset",
+  "/api/auth/public/password-reset/confirm", 
+  "/api/auth/public/password-reset/resend",
+  "/api/auth/pre/login/mfa",
+  "/api/auth/resend-mfa"
+]
+
+// Fonction pour vérifier si un endpoint est public
+const isPublicEndpoint = (url: string): boolean => {
+  return PUBLIC_ENDPOINTS.some(endpoint => url.includes(endpoint))
+}
+
+// Request interceptor to add CSRF token conditionally
 apiClient.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem("token")
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`
+    const url = config.url || ""
+    
+    // Seulement ajouter CSRF token pour les endpoints protégés
+    if (!isPublicEndpoint(url)) {
+      const csrfToken = localStorage.getItem("csrfToken")
+      if (csrfToken) {
+        config.headers["X-CSRF-Token"] = csrfToken
+        console.log(`🛡️ Adding CSRF token to protected endpoint: ${url}`)
+      } else {
+        console.warn(`⚠️ No CSRF token found for protected endpoint: ${url}`)
+      }
+    } else {
+      console.log(`🔓 Public endpoint, no CSRF required: ${url}`)
     }
+    
     return config
   },
   (error) => {
@@ -25,19 +50,38 @@ apiClient.interceptors.request.use(
   },
 )
 
-// Response interceptor to handle auth errors
+// Response interceptor to handle auth errors and CSRF renewal
 apiClient.interceptors.response.use(
-  (response) => {
-    return response
-  },
+  (response) => response,
   (error) => {
-    // Enhanced error handling without console logs
-    if (error.response?.status === 401) {
-      localStorage.removeItem("token")
-      window.location.href = "/login"
-    }
+    const url = error.config?.url || ""
     
-    // Preserve the original error structure for better debugging
+    if (error.response?.status === 401) {
+      const errorMessage = error.response?.data?.message || ""
+      const responseType = error.response?.data?.responseType || ""
+      
+      // Pour les endpoints publics, ne pas forcer la déconnexion
+      if (isPublicEndpoint(url)) {
+        console.log(`🔓 Authentication error on public endpoint: ${url}`)
+        return Promise.reject(error)
+      }
+      
+      // Pour les endpoints protégés, vérifier les erreurs d'authentification
+      const isAuthFailure = 
+        errorMessage.toLowerCase().includes('no jwt token') ||
+        errorMessage.toLowerCase().includes('invalid authentication') ||
+        errorMessage.toLowerCase().includes('no authentication found') ||
+        errorMessage.toLowerCase().includes('csrf validation failed') ||
+        responseType === "INVALID_TOKEN" ||
+        responseType === "TOKEN_EXPIRED" ||
+        responseType === "UNAUTHORIZED"
+        
+      if (isAuthFailure) {
+        console.log(`🚨 Authentication failure on protected endpoint: ${url}`)
+        localStorage.removeItem("csrfToken")
+        window.location.href = "/login"
+      }
+    }
     return Promise.reject(error)
   },
 )

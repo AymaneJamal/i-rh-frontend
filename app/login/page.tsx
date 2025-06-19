@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -10,23 +10,37 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { useAppDispatch } from "@/lib/hooks"
-import { loginUser } from "@/lib/store/auth-slice"
+import { useAppDispatch, useAppSelector } from "@/lib/hooks"
+import { loginUser, clearError } from "@/lib/store/auth-slice"
 import { Eye, EyeOff, Lock, Mail } from "lucide-react"
 
 export default function LoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
-  const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
 
   const dispatch = useAppDispatch()
   const router = useRouter()
+  const { authState, error } = useAppSelector((state) => state.auth)
+
+  // Clear any existing errors when component mounts
+  useEffect(() => {
+    dispatch(clearError())
+  }, [dispatch])
+
+  // Handle redirect based on auth state
+  useEffect(() => {
+    if (authState === "AUTHENTICATED") {
+      router.push("/dashboard")
+    } else if (authState === "SEMI_AUTH") {
+      router.push("/verify")
+    }
+  }, [authState, router])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setError("")
+    dispatch(clearError())
     setLoading(true)
 
     try {
@@ -38,7 +52,8 @@ export default function LoginPage() {
         router.push("/dashboard")
       }
     } catch (err: any) {
-      setError(err.message || "Login failed. Please try again.")
+      // Error is handled by Redux slice
+      console.error("Login error:", err)
     } finally {
       setLoading(false)
     }

@@ -22,13 +22,19 @@ export default function VerifyPage() {
 
   const dispatch = useAppDispatch()
   const router = useRouter()
-  const { authState, user } = useAppSelector((state) => state.auth)
+  const { authState, tempEmail } = useAppSelector((state) => state.auth)
 
   useEffect(() => {
-    if (authState !== "SEMI_AUTH") {
+    // Strict route protection - only allow access if in SEMI_AUTH state
+    if (authState === "NOT_AUTH") {
+      router.push("/login")
+    } else if (authState === "AUTHENTICATED") {
+      router.push("/dashboard")
+    } else if (authState === "SEMI_AUTH" && !tempEmail) {
+      // If SEMI_AUTH but no temp email, something went wrong, redirect to login
       router.push("/login")
     }
-  }, [authState, router])
+  }, [authState, tempEmail, router])
 
   useEffect(() => {
     if (countdown > 0) {
@@ -46,7 +52,7 @@ export default function VerifyPage() {
       await dispatch(verifyMFA({ code })).unwrap()
       router.push("/dashboard")
     } catch (err: any) {
-      setError(err.message || "Verification failed. Please try again.")
+      setError(err || "Verification failed. Please try again.")
     } finally {
       setLoading(false)
     }
@@ -60,10 +66,19 @@ export default function VerifyPage() {
       await dispatch(resendMFACode()).unwrap()
       setCountdown(60)
     } catch (err: any) {
-      setError(err.message || "Failed to resend code.")
+      setError(err || "Failed to resend code.")
     } finally {
       setResendLoading(false)
     }
+  }
+
+  // Don't render if not in proper state
+  if (authState !== "SEMI_AUTH" || !tempEmail) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-teal-600"></div>
+      </div>
+    )
   }
 
   return (
@@ -76,7 +91,7 @@ export default function VerifyPage() {
             </div>
           </div>
           <CardTitle className="text-2xl font-bold text-center">Verify Your Identity</CardTitle>
-          <CardDescription className="text-center">Enter the verification code sent to {user?.email}</CardDescription>
+          <CardDescription className="text-center">Enter the verification code sent to {tempEmail}</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">

@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { useAppSelector } from "@/lib/hooks"
 import {
   LayoutDashboard,
   Users,
@@ -22,9 +23,13 @@ import {
   Lock,
   BookOpen,
   Table,
+  Shield,
+  UserCog,
 } from "lucide-react"
 
-const menuItems = [
+
+/*
+const baseMenuItems = [
   {
     title: "Dashboard",
     icon: LayoutDashboard,
@@ -100,47 +105,100 @@ const menuItems = [
     icon: Map,
     href: "/dashboard/maps",
   },
+]
+*/
+
+const baseMenuItems = [{}]
+
+const userManagementSection = {
+  title: "User Management",
+  icon: Users,
+  children: [
+    {
+      title: "All Users",
+      href: "/dashboard/users",
+    },
+    {
+      title: "Add User",
+      href: "/dashboard/users/add",
+    },
+    {
+      title: "User Roles",
+      href: "/dashboard/users/roles",
+    },
+    {
+      title: "Permissions",
+      href: "/dashboard/users/permissions",
+    },
+  ],
+}
+
+const tenantManagementSection = {
+  title: "Tenant Management",
+  icon: Building2,
+  children: [
+    {
+      title: "All Tenants",
+      href: "/dashboard/tenants",
+    },
+    {
+      title: "Add Tenant",
+      href: "/dashboard/tenants/add",
+    },
+    {
+      title: "Tenant Settings",
+      href: "/dashboard/tenants/settings",
+    },
+    {
+      title: "Billing",
+      href: "/dashboard/tenants/billing",
+    },
+  ],
+}
+
+// ADMIN_PRINCIPAL exclusive sections
+const adminPrincipalSections = [
   {
-    title: "User Management",
-    icon: Users,
+    title: "Super Admin Management",
+    icon: Shield,
     children: [
       {
-        title: "All Users",
-        href: "/dashboard/users",
+        title: "All Super Admins",
+        href: "/dashboard/super-admins",
       },
       {
-        title: "Add User",
-        href: "/dashboard/users/add",
+        title: "Add Super Admin",
+        href: "/dashboard/super-admins/add",
       },
       {
-        title: "User Roles",
-        href: "/dashboard/users/roles",
+        title: "Admin Permissions",
+        href: "/dashboard/super-admins/permissions",
       },
       {
-        title: "Permissions",
-        href: "/dashboard/users/permissions",
+        title: "Admin Roles",
+        href: "/dashboard/super-admins/roles",
       },
     ],
   },
   {
-    title: "Tenant Management",
-    icon: Building2,
+    title: "System Configuration",
+    icon: UserCog,
     children: [
       {
-        title: "All Tenants",
-        href: "/dashboard/tenants",
+        title: "Global Settings",
+        href: "/dashboard/system/settings",
       },
       {
-        title: "Add Tenant",
-        href: "/dashboard/tenants/add",
+        title: "Security Config",
+        href: "/dashboard/system/security",
       },
       {
-        title: "Tenant Settings",
-        href: "/dashboard/tenants/settings",
+        title: "System Logs",
+        href: "/dashboard/system/logs",
       },
       {
-        title: "Billing",
-        href: "/dashboard/tenants/billing",
+        title: "Backup & Restore",
+        href: "/dashboard/system/backup",
       },
     ],
   },
@@ -149,84 +207,99 @@ const menuItems = [
 export function Sidebar() {
   const pathname = usePathname()
   const [openItems, setOpenItems] = useState<string[]>([])
+  const { user } = useAppSelector((state) => state.auth)
 
   const toggleItem = (title: string) => {
-    setOpenItems((prev) => (prev.includes(title) ? prev.filter((item) => item !== title) : [...prev, title]))
+    setOpenItems((prev) =>
+      prev.includes(title) ? prev.filter((item) => item !== title) : [...prev, title]
+    )
   }
 
-  const isActive = (href: string) => {
-    return pathname === href
+  // Build menu items based on user role
+  const getMenuItems = () => {
+    const menuItems = [...baseMenuItems]
+    const sections = []
+
+    // All authenticated users get user and tenant management
+    sections.push(userManagementSection, tenantManagementSection)
+
+    // ADMIN_PRINCIPAL gets additional sections
+    if (user?.role === "ADMIN_PRINCIPAL") {
+      sections.push(...adminPrincipalSections)
+    }
+
+    return { menuItems, sections }
   }
 
-  const isParentActive = (children: any[]) => {
-    return children.some((child) => pathname === child.href)
-  }
+  const { menuItems, sections } = getMenuItems()
 
   return (
     <div className="fixed left-0 top-16 h-[calc(100vh-4rem)] w-64 bg-white border-r border-gray-200 overflow-y-auto">
-      <div className="p-4">
-        <div className="mb-6">
-          <Button variant="ghost" className="w-full justify-start text-teal-600 hover:text-teal-700 hover:bg-teal-50">
-            <Settings className="mr-2 h-4 w-4" />
-            Menu
-          </Button>
-        </div>
+      <div className="p-4 space-y-2">
+        {/* Base Menu Items 
+        {menuItems.map((item) => (
+          <Link key={item.href} href={item.href}>
+            <Button
+              variant={pathname === item.href ? "secondary" : "ghost"}
+              className={cn(
+                "w-full justify-start",
+                pathname === item.href && "bg-teal-50 text-teal-700 hover:bg-teal-100"
+              )}
+            >
+              <item.icon className="mr-2 h-4 w-4" />
+              {item.title}
+            </Button>
+          </Link>
+        ))} */}
 
-        <nav className="space-y-1">
-          {menuItems.map((item) => {
-            if (item.children) {
-              const isOpen = openItems.includes(item.title)
-              const isChildActive = isParentActive(item.children)
+        {/* Collapsible Sections */}
+        {sections.map((section) => (
+          <Collapsible
+            key={section.title}
+            open={openItems.includes(section.title)}
+            onOpenChange={() => toggleItem(section.title)}
+          >
+            <CollapsibleTrigger asChild>
+              <Button variant="ghost" className="w-full justify-between">
+                <div className="flex items-center">
+                  <section.icon className="mr-2 h-4 w-4" />
+                  {section.title}
+                </div>
+                {openItems.includes(section.title) ? (
+                  <ChevronDown className="h-4 w-4" />
+                ) : (
+                  <ChevronRight className="h-4 w-4" />
+                )}
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="space-y-1 ml-4">
+              {section.children.map((child) => (
+                <Link key={child.href} href={child.href}>
+                  <Button
+                    variant={pathname === child.href ? "secondary" : "ghost"}
+                    size="sm"
+                    className={cn(
+                      "w-full justify-start",
+                      pathname === child.href && "bg-teal-50 text-teal-700 hover:bg-teal-100"
+                    )}
+                  >
+                    {child.title}
+                  </Button>
+                </Link>
+              ))}
+            </CollapsibleContent>
+          </Collapsible>
+        ))}
 
-              return (
-                <Collapsible key={item.title} open={isOpen} onOpenChange={() => toggleItem(item.title)}>
-                  <CollapsibleTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      className={cn(
-                        "w-full justify-between text-left font-normal",
-                        isChildActive && "bg-teal-50 text-teal-700",
-                      )}
-                    >
-                      <div className="flex items-center">
-                        <item.icon className="mr-3 h-4 w-4" />
-                        {item.title}
-                      </div>
-                      {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                    </Button>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent className="space-y-1 ml-6 mt-1">
-                    {item.children.map((child) => (
-                      <Link key={child.href} href={child.href}>
-                        <Button
-                          variant="ghost"
-                          className={cn(
-                            "w-full justify-start text-sm font-normal",
-                            isActive(child.href) && "bg-teal-50 text-teal-700",
-                          )}
-                        >
-                          {child.title}
-                        </Button>
-                      </Link>
-                    ))}
-                  </CollapsibleContent>
-                </Collapsible>
-              )
-            }
-
-            return (
-              <Link key={item.href} href={item.href}>
-                <Button
-                  variant="ghost"
-                  className={cn("w-full justify-start font-normal", isActive(item.href) && "bg-teal-50 text-teal-700")}
-                >
-                  <item.icon className="mr-3 h-4 w-4" />
-                  {item.title}
-                </Button>
-              </Link>
-            )
-          })}
-        </nav>
+        {/* Role-based indicator */}
+        {user?.role === "ADMIN_PRINCIPAL" && (
+          <div className="mt-6 p-3 bg-red-50 border border-red-200 rounded-lg">
+            <div className="flex items-center text-red-700">
+              <Shield className="h-4 w-4 mr-2" />
+              <span className="text-xs font-medium">Admin Principal Access</span>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
