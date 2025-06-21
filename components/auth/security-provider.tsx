@@ -3,7 +3,7 @@
 import type React from "react"
 import { useEffect, useRef, useState } from "react"
 import { useAppDispatch, useAppSelector } from "@/lib/hooks"
-import { validateToken, validateCsrfToken, logout } from "@/lib/store/auth-slice"
+import { validateToken, logout } from "@/lib/store/auth-slice"
 import { useRouter } from "next/navigation"
 
 interface SecurityProviderProps {
@@ -34,23 +34,7 @@ export function SecurityProvider({
       setIsValidating(true)
       console.log(`🔒 Performing periodic security validation (every ${validationInterval} min)`)
       
-      // Step 1: Validate CSRF Token seulement si on en a un
-      if (csrfToken) {
-        console.log("🛡️ Validating CSRF token...")
-        try {
-          const csrfResult = await dispatch(validateCsrfToken()).unwrap()
-          
-          if (!csrfResult.valid && csrfResult.newCsrfToken) {
-            console.log("🔄 CSRF token was renewed during validation")
-          }
-        } catch (csrfError) {
-          console.error("❌ CSRF validation failed:", csrfError)
-          // Ne pas arrêter la validation JWT si CSRF échoue, le token pourrait être expiré
-        }
-      }
-      
-      // Step 2: Validate JWT Token (via cookie) - plus critique
-      console.log("🔑 Validating JWT token...")
+      // Validate JWT Token and handle CSRF renewal automatically
       await dispatch(validateToken({ role: user.role })).unwrap()
       
       // Reset failure count on successful validation
@@ -61,6 +45,15 @@ export function SecurityProvider({
       failureCountRef.current += 1
       console.error(`❌ Periodic security validation failed (${failureCountRef.current}/${maxFailures})`, error)
       
+      // If the error is JWT_INVALID, logout immediately
+      if (error === "JWT_INVALID") {
+        console.log("🚨 JWT invalid, forcing immediate logout")
+        await dispatch(logout())
+        router.push("/login")
+        return
+      }
+      
+      // For other errors, check failure count
       if (failureCountRef.current >= maxFailures) {
         console.log("🚨 Max validation failures reached, forcing logout")
         await dispatch(logout())

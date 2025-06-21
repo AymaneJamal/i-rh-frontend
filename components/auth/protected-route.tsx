@@ -22,12 +22,12 @@ export function ProtectedRoute({
   
   const dispatch = useAppDispatch()
   const router = useRouter()
-  const { authState, user, token } = useAppSelector((state) => state.auth)
+  const { authState, user, csrfToken } = useAppSelector((state) => state.auth)
 
   useEffect(() => {
     const validateAccess = async () => {
       // First check if user is authenticated
-      if (authState !== "AUTHENTICATED" || !token) {
+      if (authState !== "AUTHENTICATED" || !csrfToken) {
         router.push("/login")
         return
       }
@@ -65,19 +65,28 @@ export function ProtectedRoute({
         // Token validation failed - logout handled by auth slice
         console.error("Token validation failed:", error)
         setIsAuthorized(false)
+        
+        // If it's a JWT_INVALID error, the auth slice will handle logout
+        // For other errors, redirect to dashboard
+        if (error !== "JWT_INVALID") {
+          router.push("/dashboard")
+        }
       } finally {
         setIsValidating(false)
       }
     }
 
     validateAccess()
-  }, [authState, token, requiredRole, allowBoth, user?.role, dispatch, router])
+  }, [authState, csrfToken, requiredRole, allowBoth, user?.role, dispatch, router])
 
   // Show loading while validating
   if (isValidating) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-teal-600"></div>
+        <div className="flex flex-col items-center space-y-4">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-teal-600"></div>
+          <p className="text-gray-600">Validating access...</p>
+        </div>
       </div>
     )
   }
@@ -90,7 +99,10 @@ export function ProtectedRoute({
   // Return loading spinner while redirecting
   return (
     <div className="flex items-center justify-center min-h-screen">
-      <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-teal-600"></div>
+      <div className="flex flex-col items-center space-y-4">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-teal-600"></div>
+        <p className="text-gray-600">Redirecting...</p>
+      </div>
     </div>
   )
 }

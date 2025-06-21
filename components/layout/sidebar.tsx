@@ -27,87 +27,6 @@ import {
   UserCog,
 } from "lucide-react"
 
-
-/*
-const baseMenuItems = [
-  {
-    title: "Dashboard",
-    icon: LayoutDashboard,
-    href: "/dashboard",
-  },
-  {
-    title: "Analytical",
-    icon: BarChart3,
-    href: "/dashboard/analytical",
-  },
-  {
-    title: "Demographic",
-    icon: Users,
-    href: "/dashboard/demographic",
-  },
-  {
-    title: "IoT",
-    icon: Zap,
-    href: "/dashboard/iot",
-  },
-  {
-    title: "App",
-    icon: Layers,
-    href: "/dashboard/app",
-  },
-  {
-    title: "File Manager",
-    icon: Database,
-    href: "/dashboard/files",
-  },
-  {
-    title: "Blog",
-    icon: BookOpen,
-    href: "/dashboard/blog",
-  },
-  {
-    title: "UI Elements",
-    icon: Layers,
-    href: "/dashboard/ui-elements",
-  },
-  {
-    title: "Widgets",
-    icon: Settings,
-    href: "/dashboard/widgets",
-  },
-  {
-    title: "Authentication",
-    icon: Lock,
-    href: "/dashboard/auth",
-  },
-  {
-    title: "Pages",
-    icon: FileText,
-    href: "/dashboard/pages",
-  },
-  {
-    title: "Forms",
-    icon: FileText,
-    href: "/dashboard/forms",
-  },
-  {
-    title: "Tables",
-    icon: Table,
-    href: "/dashboard/tables",
-  },
-  {
-    title: "Charts",
-    icon: BarChart3,
-    href: "/dashboard/charts",
-  },
-  {
-    title: "Maps",
-    icon: Map,
-    href: "/dashboard/maps",
-  },
-]
-*/
-
 const baseMenuItems = [{}]
 
 const userManagementSection = {
@@ -234,24 +153,8 @@ export function Sidebar() {
   const { menuItems, sections } = getMenuItems()
 
   return (
-    <div className="fixed left-0 top-16 h-[calc(100vh-4rem)] w-64 bg-white border-r border-gray-200 overflow-y-auto">
+    <div className="fixed left-0 top-20 h-[calc(100vh-5rem)] w-64 bg-white border-r border-gray-200 overflow-y-auto z-40">
       <div className="p-4 space-y-2">
-        {/* Base Menu Items 
-        {menuItems.map((item) => (
-          <Link key={item.href} href={item.href}>
-            <Button
-              variant={pathname === item.href ? "secondary" : "ghost"}
-              className={cn(
-                "w-full justify-start",
-                pathname === item.href && "bg-teal-50 text-teal-700 hover:bg-teal-100"
-              )}
-            >
-              <item.icon className="mr-2 h-4 w-4" />
-              {item.title}
-            </Button>
-          </Link>
-        ))} */}
-
         {/* Collapsible Sections */}
         {sections.map((section) => (
           <Collapsible

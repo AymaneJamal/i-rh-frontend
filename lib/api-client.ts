@@ -13,10 +13,11 @@ export const apiClient = axios.create({
 // Liste des endpoints publics qui ne nécessitent pas de CSRF token
 const PUBLIC_ENDPOINTS = [
   "/api/auth/public/login",
+  "/api/auth/public/login/mfa",
   "/api/auth/public/password-reset",
   "/api/auth/public/password-reset/confirm", 
   "/api/auth/public/password-reset/resend",
-  "/api/auth/pre/login/mfa",
+  "/api/auth/public/csrf-token",
   "/api/auth/resend-mfa"
 ]
 
@@ -50,7 +51,7 @@ apiClient.interceptors.request.use(
   },
 )
 
-// Response interceptor to handle auth errors and CSRF renewal
+// Response interceptor to handle auth errors
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
@@ -66,18 +67,19 @@ apiClient.interceptors.response.use(
         return Promise.reject(error)
       }
       
-      // Pour les endpoints protégés, vérifier les erreurs d'authentification
-      const isAuthFailure = 
+      // Pour les endpoints protégés, vérifier les types d'erreurs
+      const isJWTFailure = 
         errorMessage.toLowerCase().includes('no jwt token') ||
         errorMessage.toLowerCase().includes('invalid authentication') ||
         errorMessage.toLowerCase().includes('no authentication found') ||
-        errorMessage.toLowerCase().includes('csrf validation failed') ||
+        errorMessage.toLowerCase().includes('token expired') ||
         responseType === "INVALID_TOKEN" ||
         responseType === "TOKEN_EXPIRED" ||
         responseType === "UNAUTHORIZED"
         
-      if (isAuthFailure) {
-        console.log(`🚨 Authentication failure on protected endpoint: ${url}`)
+      // CSRF failures are handled by the auth slice, not here
+      if (isJWTFailure && !errorMessage.includes("CSRF")) {
+        console.log(`🚨 JWT authentication failure on protected endpoint: ${url}`)
         localStorage.removeItem("csrfToken")
         window.location.href = "/login"
       }
@@ -85,3 +87,5 @@ apiClient.interceptors.response.use(
     return Promise.reject(error)
   },
 )
+
+export default apiClient

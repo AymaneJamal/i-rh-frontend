@@ -54,7 +54,8 @@ export default function DashboardLayout({
   return (
     <div className="min-h-screen bg-gray-50">
       <Navbar />
-      <div className="flex">
+      {/* Ajouter padding-top pour compenser la navbar fixe */}
+      <div className="pt-20 flex">
         <Sidebar />
         <main className="flex-1 ml-64 p-6">{children}</main>
       </div>
