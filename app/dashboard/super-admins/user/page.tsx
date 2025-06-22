@@ -290,10 +290,13 @@ const SuperAdminDetailContent = () => {
             <RefreshCw className="h-4 w-4 mr-2" />
             Refresh
           </Button>
-          <Button className="bg-red-600 hover:bg-red-700">
-            <Edit className="h-4 w-4 mr-2" />
-            Edit Profile
-          </Button>
+            <Button 
+                className="bg-red-600 hover:bg-red-700"
+                onClick={() => router.push(`/dashboard/super-admins/edit?email=${encodeURIComponent(user.email)}`)}
+                >
+                <Edit className="h-4 w-4 mr-2" />
+                Edit Profile
+            </Button>
         </div>
       </div>
 

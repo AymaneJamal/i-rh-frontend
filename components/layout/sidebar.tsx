@@ -88,15 +88,7 @@ const adminPrincipalSections = [
       {
         title: "Add Super Admin",
         href: "/dashboard/super-admins/add",
-      },
-      {
-        title: "Admin Permissions",
-        href: "/dashboard/super-admins/permissions",
-      },
-      {
-        title: "Admin Roles",
-        href: "/dashboard/super-admins/roles",
-      },
+      }
     ],
   },
   {

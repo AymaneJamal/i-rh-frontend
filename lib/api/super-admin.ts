@@ -1,6 +1,6 @@
 // lib/api/super-admin.ts
 import { apiClient } from "@/lib/api-client"
-import { SuperAdminResponse, SuperAdminFilters, SuperAdminDetailResponse, ProfilePictureUploadResponse } from "@/types/super-admin"
+import { SuperAdminResponse, SuperAdminFilters, SuperAdminDetailResponse, ProfilePictureUploadResponse, DocumentUploadResponse, CreateSuperAdminRequest, CreateSuperAdminResponse , UpdateSuperAdminRequest, UpdateSuperAdminResponse } from "@/types/super-admin"
 
 export const superAdminApi = {
   /**
@@ -21,6 +21,29 @@ export const superAdminApi = {
 
     const response = await apiClient.get(`/api/super-admin/users?${params.toString()}`)
     return response.data
+  },
+
+  /**
+   * Create new super admin user
+   */
+  createSuperAdmin: async (request: CreateSuperAdminRequest): Promise<CreateSuperAdminResponse> => {
+    try {
+      console.log("🆕 Creating super admin user:", request.email)
+      
+      const response = await apiClient.post('/api/super-admin/users', request)
+      
+      console.log("✅ Super admin created successfully:", response.data)
+      return response.data
+    } catch (error: any) {
+      console.error("❌ Failed to create super admin:", error)
+      console.error("❌ Error details:", {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        url: error.config?.url
+      })
+      throw error
+    }
   },
 
   /**
@@ -118,5 +141,141 @@ export const superAdminApi = {
       }
     )
     return response.data
+  },
+
+  /**
+   * Upload document for super admin
+   */
+  uploadDocument: async (
+    email: string, 
+    file: File, 
+    documentType: string, 
+    description?: string
+  ): Promise<DocumentUploadResponse> => {
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('documentType', documentType)
+      if (description) {
+        formData.append('description', description)
+      }
+
+      console.log("📄 Uploading document for email:", email)
+      console.log("📄 Document type:", documentType)
+      console.log("📄 File:", file.name, file.size, "bytes")
+      console.log("📄 Description:", description || "Document uploadé")
+
+      const response = await apiClient.post(
+        `/api/super-admin/users/${encodeURIComponent(email)}/documents`,
+        formData,
+        {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        }
+      )
+
+      console.log("✅ Document uploaded successfully:", response.data)
+      return response.data
+    } catch (error: any) {
+      console.error("❌ Failed to upload document:", error)
+      console.error("❌ Error details:", {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        url: error.config?.url
+      })
+      throw error
+    }
+  },
+
+  /**
+   * Download document by ID
+   */
+  downloadDocument: async (documentId: number): Promise<void> => {
+    try {
+      console.log("📥 Downloading document with ID:", documentId)
+
+      const response = await apiClient.get(
+        `/api/super-admin/documents/${documentId}/download`,
+        {
+          responseType: 'blob',
+          withCredentials: true
+        }
+      )
+
+      // Get filename from Content-Disposition header or use default
+      const contentDisposition = response.headers['content-disposition']
+      let filename = `document_${documentId}`
+      
+      if (contentDisposition) {
+        // Handle both quoted and unquoted filenames
+        const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/)
+        if (filenameMatch && filenameMatch[1]) {
+          filename = filenameMatch[1].replace(/['"]/g, '')
+          // Decode if it's URL encoded
+          try {
+            filename = decodeURIComponent(filename)
+          } catch (e) {
+            // If decoding fails, use as is
+          }
+        }
+      }
+
+      // Get the correct MIME type from response headers
+      const contentType = response.headers['content-type'] || 'application/octet-stream'
+      
+      // Create blob with correct MIME type
+      const blob = new Blob([response.data], { type: contentType })
+      const downloadUrl = window.URL.createObjectURL(blob)
+      
+      // Create temporary link and trigger download
+      const link = document.createElement('a')
+      link.href = downloadUrl
+      link.download = filename
+      link.style.display = 'none'
+      document.body.appendChild(link)
+      link.click()
+      
+      // Cleanup
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(downloadUrl)
+      
+      console.log("✅ Document downloaded successfully:", filename)
+    } catch (error: any) {
+      console.error("❌ Failed to download document:", error)
+      console.error("❌ Error details:", {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        url: error.config?.url
+      })
+      throw error
+    }
+  },
+
+
+    /**
+   * Update super admin user
+   */
+  updateSuperAdmin: async (email: string, request: UpdateSuperAdminRequest): Promise<UpdateSuperAdminResponse> => {
+    try {
+      console.log("✏️ Updating super admin user:", email)
+      console.log("✏️ Update data:", request)
+      
+      const response = await apiClient.put(`/api/super-admin/users/${encodeURIComponent(email)}`, request)
+      
+      console.log("✅ Super admin updated successfully:", response.data)
+      return response.data
+    } catch (error: any) {
+      console.error("❌ Failed to update super admin:", error)
+      console.error("❌ Error details:", {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        url: error.config?.url
+      })
+      throw error
+    }
   }
 }

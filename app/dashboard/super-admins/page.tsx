@@ -269,6 +269,8 @@ const Pagination = ({
 }
 
 export default function SuperAdminsPage() {
+  const router = useRouter() 
+
   const {
     users,
     loading,
@@ -306,10 +308,10 @@ export default function SuperAdminsPage() {
             </h1>
             <p className="text-gray-600">Manage super administrators and their permissions</p>
           </div>
-          <Button className="bg-red-600 hover:bg-red-700">
-            <Plus className="mr-2 h-4 w-4" />
-            Add Super Admin
-          </Button>
+        <Button className="bg-red-600 hover:bg-red-700" onClick={() => router.push("/dashboard/super-admins/add")}>
+          <Plus className="mr-2 h-4 w-4" />
+          Add Super Admin
+        </Button>
         </div>
 
         {/* Access Level Warning */}

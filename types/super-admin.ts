@@ -34,6 +34,33 @@ export interface ProfilePictureUploadResponse {
   data: FileUploadResponse
 }
 
+// Interface for document upload response
+export interface DocumentUploadResponse {
+  success: boolean
+  message: string
+  data: FileUploadResponse
+}
+
+// Interface for creating a new super admin
+export interface CreateSuperAdminRequest {
+  email: string
+  password: string
+  firstName: string
+  lastName: string
+  companyRole?: string
+  department?: string
+  phoneNumber?: string
+  address?: string
+  createdBy?: string
+}
+
+// Interface for create super admin response
+export interface CreateSuperAdminResponse {
+  success: boolean
+  message: string
+  data: SuperAdminUser
+}
+
 export interface SuperAdminUser {
   id: string
   email: string
@@ -78,4 +105,22 @@ export interface SuperAdminFilters {
   createdBy?: string
   status?: string
   email?: string
+}
+
+
+// Interface for updating a super admin
+export interface UpdateSuperAdminRequest {
+  firstName?: string
+  lastName?: string
+  companyRole?: string
+  department?: string
+  phoneNumber?: string
+  address?: string
+}
+
+// Interface for update super admin response
+export interface UpdateSuperAdminResponse {
+  success: boolean
+  message: string
+  data: SuperAdminUser
 }
