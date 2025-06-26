@@ -1,10 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
 import {
   Dialog,
   DialogContent,
@@ -22,10 +21,13 @@ import {
 } from "@/components/ui/select"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
-import { Switch } from "@/components/ui/switch"
-import { tenantApi } from "@/lib/api/tenant"
-import { AssignSubscriptionRequest, SubscriptionPlan } from "@/types/tenant"
-import { CreditCard, Upload, FileText, AlertCircle, CheckCircle, Crown, Zap, Users, HardDrive } from "lucide-react"
+import { Card, CardContent } from "@/components/ui/card"
+import { useSubscriptionPlans } from "@/hooks/use-subscription-plans"
+import { useTenantSubscription } from "@/hooks/use-tenant-subscription"
+import { validateFileUpload, validatePaymentInfo } from "@/lib/validators"
+import { formatCurrency } from "@/lib/formatters"
+import { PAYMENT_METHODS } from "@/lib/constants"
+import { CreditCard, Upload, FileText, AlertCircle, CheckCircle, Crown, Zap, Users, HardDrive, X } from "lucide-react"
 
 interface SubscriptionModalProps {
   isOpen: boolean
@@ -35,44 +37,11 @@ interface SubscriptionModalProps {
   onSubscriptionAssigned: () => void
 }
 
-const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
-  {
-    id: "starter",
-    name: "Starter",
-    price: 29,
-    duration: 1,
-    features: ["Jusqu'à 10 utilisateurs", "5GB de stockage", "Support email", "Fonctionnalités de base"],
-    maxUsers: 10,
-    maxStorage: 5,
-    support: "Email"
-  },
-  {
-    id: "professional",
-    name: "Professional",
-    price: 79,
-    duration: 1,
-    features: ["Jusqu'à 50 utilisateurs", "50GB de stockage", "Support prioritaire", "Fonctionnalités avancées", "Intégrations API"],
-    maxUsers: 50,
-    maxStorage: 50,
-    support: "Priority"
-  },
-  {
-    id: "enterprise",
-    name: "Enterprise",
-    price: 199,
-    duration: 1,
-    features: ["Utilisateurs illimités", "500GB de stockage", "Support 24/7", "Toutes les fonctionnalités", "Intégrations personnalisées", "Manager dédié"],
-    maxUsers: -1, // unlimited
-    maxStorage: 500,
-    support: "24/7"
-  }
-]
-
 const BILLING_METHODS = [
-  { value: "credit_card", label: "Carte de crédit" },
-  { value: "bank_transfer", label: "Virement bancaire" },
-  { value: "paypal", label: "PayPal" },
-  { value: "invoice", label: "Facturation" }
+  { value: "BANK_TRANSFER", label: "Virement bancaire" },
+  { value: "CREDIT_CARD", label: "Carte de crédit" },
+  { value: "PAYPAL", label: "PayPal" },
+  { value: "CHECK", label: "Chèque" }
 ]
 
 export function SubscriptionModal({
@@ -83,107 +52,112 @@ export function SubscriptionModal({
   onSubscriptionAssigned
 }: SubscriptionModalProps) {
   const [selectedPlan, setSelectedPlan] = useState<string>("")
-  const [billingMethod, setBillingMethod] = useState<string>("")
+  const [paymentMethod, setPaymentMethod] = useState<string>("")
+  const [paymentReference, setPaymentReference] = useState<string>("")
   const [receiptFile, setReceiptFile] = useState<File | null>(null)
-  const [autoRenew, setAutoRenew] = useState(true)
-  const [customExpiryDate, setCustomExpiryDate] = useState("")
-  const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
 
-  const selectedPlanDetails = SUBSCRIPTION_PLANS.find(plan => plan.id === selectedPlan)
+  const { plans, loading: plansLoading } = useSubscriptionPlans({ publicOnly: true })
+  const { assignPlan, loading: assignLoading } = useTenantSubscription()
+
+  const selectedPlanDetails = plans.find(plan => plan.planId === selectedPlan)
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (file) {
-      // Validate file type
-      const allowedTypes = ['image/jpeg', 'image/png', 'application/pdf']
-      if (!allowedTypes.includes(file.type)) {
-        setError("Format de fichier non supporté. Utilisez JPG, PNG ou PDF.")
-        return
-      }
-      
-      // Validate file size (5MB max)
-      if (file.size > 5 * 1024 * 1024) {
-        setError("Le fichier est trop volumineux. Taille maximale: 5MB")
-        return
-      }
-      
-      setReceiptFile(file)
-      setError(null)
-    }
-  }
+    setError(null)
 
-  const handleAssignSubscription = async () => {
-    if (!selectedPlan || !billingMethod) {
-      setError("Veuillez sélectionner un plan et une méthode de paiement")
+    if (!file) {
+      setReceiptFile(null)
       return
     }
 
-    setLoading(true)
+    const validation = validateFileUpload(file, 'receipt')
+    if (!validation.isValid) {
+      setError(validation.errors[0])
+      return
+    }
+    
+    setReceiptFile(file)
+  }
+
+  const handleAssignSubscription = async () => {
+    if (!selectedPlan || !paymentMethod || !paymentReference || !receiptFile) {
+      setError("Veuillez remplir tous les champs et joindre un reçu")
+      return
+    }
+
+    const paymentValidation = validatePaymentInfo(100, paymentMethod, paymentReference)
+    if (!paymentValidation.isValid) {
+      setError(paymentValidation.errors[0])
+      return
+    }
+
     setError(null)
 
     try {
-      const request: AssignSubscriptionRequest = {
+      const success = await assignPlan(
         tenantId,
-        planId: selectedPlan,
-        billingMethod,
-        autoRenew,
-        receiptFile: receiptFile || undefined,
-        customExpiryDate: customExpiryDate || undefined
+        selectedPlan,
+        paymentMethod as any,
+        paymentReference,
+        receiptFile
+      )
+
+      if (success) {
+        setSuccess(true)
+        setTimeout(() => {
+          onSubscriptionAssigned()
+          resetForm()
+        }, 2000)
       }
-
-      await tenantApi.assignSubscription(request)
-      
-      setSuccess(true)
-      setTimeout(() => {
-        onSubscriptionAssigned()
-        onClose()
-        resetForm()
-      }, 2000)
-
     } catch (err: any) {
-      console.error("Failed to assign subscription:", err)
-      setError(err.response?.data?.message || "Erreur lors de l'assignation de l'abonnement")
-    } finally {
-      setLoading(false)
+      setError(err.message || "Erreur lors de l'attribution du plan")
     }
   }
 
   const resetForm = () => {
     setSelectedPlan("")
-    setBillingMethod("")
+    setPaymentMethod("")
+    setPaymentReference("")
     setReceiptFile(null)
-    setAutoRenew(true)
-    setCustomExpiryDate("")
     setError(null)
     setSuccess(false)
   }
 
   const handleClose = () => {
-    if (!loading) {
+    if (!assignLoading) {
       resetForm()
       onClose()
     }
   }
 
   const getPlanIcon = (planId: string) => {
-    switch (planId) {
-      case "starter": return <Zap className="h-5 w-5" />
-      case "professional": return <Users className="h-5 w-5" />
-      case "enterprise": return <Crown className="h-5 w-5" />
+    const plan = plans.find(p => p.planId === planId)
+    if (!plan) return <Crown className="h-5 w-5" />
+    
+    switch (plan.category) {
+      case "BASIC": return <Zap className="h-5 w-5" />
+      case "PREMIUM": return <Users className="h-5 w-5" />
+      case "ENTERPRISE": return <Crown className="h-5 w-5" />
       default: return <CreditCard className="h-5 w-5" />
     }
   }
 
-  const getPlanColor = (planId: string) => {
-    switch (planId) {
-      case "starter": return "border-blue-200 bg-blue-50"
-      case "professional": return "border-purple-200 bg-purple-50"
-      case "enterprise": return "border-yellow-200 bg-yellow-50"
+  const getPlanColor = (category: string) => {
+    switch (category) {
+      case "BASIC": return "border-blue-200 bg-blue-50"
+      case "PREMIUM": return "border-purple-200 bg-purple-50"
+      case "ENTERPRISE": return "border-yellow-200 bg-yellow-50"
       default: return "border-gray-200 bg-gray-50"
     }
   }
+
+  useEffect(() => {
+    if (!isOpen) {
+      resetForm()
+    }
+  }, [isOpen])
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
@@ -191,7 +165,7 @@ export function SubscriptionModal({
         <DialogHeader>
           <DialogTitle className="flex items-center space-x-2">
             <CreditCard className="h-5 w-5" />
-            <span>Assigner un Abonnement</span>
+            <span>Attribuer un Plan d'Abonnement</span>
           </DialogTitle>
           <DialogDescription>
             Sélectionnez un plan d'abonnement pour <strong>{tenantName}</strong>
@@ -201,8 +175,8 @@ export function SubscriptionModal({
         {success ? (
           <div className="text-center py-8">
             <CheckCircle className="h-16 w-16 text-green-500 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold mb-2">Abonnement Assigné!</h3>
-            <p className="text-gray-600">L'abonnement a été assigné avec succès au tenant.</p>
+            <h3 className="text-lg font-semibold mb-2">Plan Attribué avec Succès!</h3>
+            <p className="text-gray-600">Le plan a été attribué au tenant avec succès.</p>
           </div>
         ) : (
           <div className="space-y-6">
@@ -216,75 +190,101 @@ export function SubscriptionModal({
             {/* Plan Selection */}
             <div className="space-y-4">
               <Label className="text-base font-semibold">Choisir un Plan d'Abonnement</Label>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {SUBSCRIPTION_PLANS.map((plan) => (
-                  <div
-                    key={plan.id}
-                    className={`relative border-2 rounded-lg p-4 cursor-pointer transition-all ${
-                      selectedPlan === plan.id 
-                        ? `${getPlanColor(plan.id)} border-current` 
-                        : "border-gray-200 hover:border-gray-300"
-                    }`}
-                    onClick={() => setSelectedPlan(plan.id)}
-                  >
-                    {selectedPlan === plan.id && (
-                      <div className="absolute -top-2 -right-2">
-                        <CheckCircle className="h-6 w-6 text-green-500 bg-white rounded-full" />
-                      </div>
-                    )}
-                    
-                    <div className="flex items-center space-x-2 mb-3">
-                      {getPlanIcon(plan.id)}
-                      <h3 className="font-semibold">{plan.name}</h3>
-                    </div>
-                    
-                    <div className="mb-3">
-                      <span className="text-2xl font-bold">{plan.price}€</span>
-                      <span className="text-gray-500">/mois</span>
-                    </div>
-                    
-                    <ul className="space-y-1 text-sm">
-                      {plan.features.map((feature, index) => (
-                        <li key={index} className="flex items-center space-x-2">
-                          <CheckCircle className="h-3 w-3 text-green-500" />
-                          <span>{feature}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ))}
-              </div>
+              {plansLoading ? (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                  <p className="text-gray-500 mt-2">Chargement des plans...</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {plans.map((plan) => (
+                    <Card
+                      key={plan.planId}
+                      className={`relative cursor-pointer transition-all ${
+                        selectedPlan === plan.planId 
+                          ? `${getPlanColor(plan.category)} border-current border-2` 
+                          : "border-gray-200 hover:border-gray-300"
+                      }`}
+                      onClick={() => setSelectedPlan(plan.planId)}
+                    >
+                      {selectedPlan === plan.planId && (
+                        <div className="absolute -top-2 -right-2">
+                          <CheckCircle className="h-6 w-6 text-green-500 bg-white rounded-full" />
+                        </div>
+                      )}
+                      
+                      <CardContent className="p-4">
+                        <div className="flex items-center space-x-2 mb-3">
+                          {getPlanIcon(plan.planId)}
+                          <h3 className="font-semibold">{plan.planName}</h3>
+                        </div>
+                        
+                        <div className="mb-3">
+                          <span className="text-2xl font-bold">{formatCurrency(plan.monthlyPrice, plan.currency)}</span>
+                          <span className="text-gray-500">/mois</span>
+                        </div>
+                        
+                        <div className="space-y-1 text-sm">
+                          <div className="flex items-center space-x-2">
+                            <Users className="h-3 w-3 text-green-500" />
+                            <span>{plan.maxUsers} utilisateurs max</span>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <HardDrive className="h-3 w-3 text-green-500" />
+                            <span>{Math.floor(plan.maxDatabaseStorageMB / 1024)}GB base de données</span>
+                          </div>
+                          {plan.hasAdvancedReporting === 1 && (
+                            <div className="flex items-center space-x-2">
+                              <CheckCircle className="h-3 w-3 text-green-500" />
+                              <span>Rapports avancés</span>
+                            </div>
+                          )}
+                          {plan.hasApiAccess === 1 && (
+                            <div className="flex items-center space-x-2">
+                              <CheckCircle className="h-3 w-3 text-green-500" />
+                              <span>Accès API</span>
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Plan Details */}
             {selectedPlanDetails && (
-              <div className="bg-gray-50 rounded-lg p-4">
-                <h4 className="font-semibold mb-2">Détails du Plan Sélectionné</h4>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                  <div className="flex items-center space-x-2">
-                    <Users className="h-4 w-4 text-gray-500" />
-                    <span>{selectedPlanDetails.maxUsers === -1 ? "Illimité" : selectedPlanDetails.maxUsers} utilisateurs</span>
+              <Card className="bg-gray-50">
+                <CardContent className="p-4">
+                  <h4 className="font-semibold mb-2">Détails du Plan Sélectionné</h4>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                    <div className="flex items-center space-x-2">
+                      <Users className="h-4 w-4 text-gray-500" />
+                      <span>{selectedPlanDetails.maxUsers === -1 ? "Illimité" : selectedPlanDetails.maxUsers} utilisateurs</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <HardDrive className="h-4 w-4 text-gray-500" />
+                      <span>{Math.floor(selectedPlanDetails.maxDatabaseStorageMB / 1024)}GB base de données</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <HardDrive className="h-4 w-4 text-gray-500" />
+                      <span>{Math.floor(selectedPlanDetails.maxS3StorageMB / 1024)}GB stockage S3</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-lg font-bold text-green-600">
+                        {formatCurrency(selectedPlanDetails.monthlyPrice, selectedPlanDetails.currency)}/mois
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex items-center space-x-2">
-                    <HardDrive className="h-4 w-4 text-gray-500" />
-                    <span>{selectedPlanDetails.maxStorage}GB stockage</span>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <CreditCard className="h-4 w-4 text-gray-500" />
-                    <span>{selectedPlanDetails.price}€/mois</span>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <CheckCircle className="h-4 w-4 text-gray-500" />
-                    <span>Support {selectedPlanDetails.support}</span>
-                  </div>
-                </div>
-              </div>
+                </CardContent>
+              </Card>
             )}
 
-            {/* Billing Method */}
+            {/* Payment Method */}
             <div className="space-y-2">
-              <Label htmlFor="billingMethod">Méthode de Paiement</Label>
-              <Select value={billingMethod} onValueChange={setBillingMethod}>
+              <Label htmlFor="paymentMethod">Méthode de Paiement *</Label>
+              <Select value={paymentMethod} onValueChange={setPaymentMethod} disabled={assignLoading}>
                 <SelectTrigger>
                   <SelectValue placeholder="Sélectionner une méthode de paiement" />
                 </SelectTrigger>
@@ -298,69 +298,88 @@ export function SubscriptionModal({
               </Select>
             </div>
 
+            {/* Payment Reference */}
+            <div className="space-y-2">
+              <Label htmlFor="paymentReference">Référence de Paiement *</Label>
+              <Input
+                id="paymentReference"
+                value={paymentReference}
+                onChange={(e) => setPaymentReference(e.target.value)}
+                placeholder="Ex: REF-PAY-2024-001, ID transaction..."
+                disabled={assignLoading}
+              />
+            </div>
+
             {/* Receipt Upload */}
             <div className="space-y-2">
-              <Label htmlFor="receipt">Reçu de Paiement (optionnel)</Label>
-              <Input
-                id="receipt"
-                type="file"
-                onChange={handleFileChange}
-                accept=".jpg,.jpeg,.png,.pdf"
-                disabled={loading}
-              />
-              {receiptFile && (
-                <div className="flex items-center space-x-2 text-sm text-gray-600">
-                  <FileText className="h-4 w-4" />
-                  <span>{receiptFile.name}</span>
+              <Label htmlFor="receipt">Reçu de Paiement *</Label>
+              <div className="border-2 border-dashed border-gray-300 rounded-lg p-6">
+                <div className="text-center">
+                  <Upload className="mx-auto h-12 w-12 text-gray-400" />
+                  <div className="mt-4">
+                    <label htmlFor="receipt" className="cursor-pointer">
+                      <span className="mt-2 block text-sm font-medium text-gray-900">
+                        Cliquez pour uploader ou glissez-déposez
+                      </span>
+                      <span className="mt-1 block text-sm text-gray-500">
+                        PDF, PNG, JPG jusqu'à 5MB
+                      </span>
+                    </label>
+                    <input
+                      id="receipt"
+                      name="receipt"
+                      type="file"
+                      className="sr-only"
+                      accept=".pdf,.png,.jpg,.jpeg"
+                      onChange={handleFileChange}
+                      disabled={assignLoading}
+                    />
+                  </div>
                 </div>
-              )}
-              <p className="text-xs text-gray-500">
-                Formats acceptés: JPG, PNG, PDF. Taille max: 5MB
-              </p>
-            </div>
-
-            {/* Auto Renewal */}
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label htmlFor="autoRenew">Renouvellement Automatique</Label>
-                <p className="text-sm text-gray-500">L'abonnement sera renouvelé automatiquement</p>
+                
+                {receiptFile && (
+                  <div className="mt-4 flex items-center justify-between p-2 bg-green-50 rounded border border-green-200">
+                    <div className="flex items-center space-x-2">
+                      <FileText className="h-4 w-4 text-green-600" />
+                      <span className="text-sm text-green-700">{receiptFile.name}</span>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setReceiptFile(null)}
+                      className="h-6 w-6 p-0"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                )}
               </div>
-              <Switch
-                id="autoRenew"
-                checked={autoRenew}
-                onCheckedChange={setAutoRenew}
-                disabled={loading}
-              />
-            </div>
-
-            {/* Custom Expiry Date */}
-            <div className="space-y-2">
-              <Label htmlFor="expiryDate">Date d'Expiration Personnalisée (optionnel)</Label>
-              <Input
-                id="expiryDate"
-                type="date"
-                value={customExpiryDate}
-                onChange={(e) => setCustomExpiryDate(e.target.value)}
-                disabled={loading}
-              />
               <p className="text-xs text-gray-500">
-                Laissez vide pour utiliser la durée par défaut du plan
+                Le reçu de paiement est obligatoire pour valider l'attribution du plan.
               </p>
             </div>
           </div>
         )}
 
         <DialogFooter>
-          <Button variant="outline" onClick={handleClose} disabled={loading}>
+          <Button variant="outline" onClick={handleClose} disabled={assignLoading}>
             Annuler
           </Button>
           {!success && (
             <Button
               onClick={handleAssignSubscription}
-              disabled={!selectedPlan || !billingMethod || loading}
+              disabled={!selectedPlan || !paymentMethod || !paymentReference || !receiptFile || assignLoading}
               className="bg-blue-600 hover:bg-blue-700"
             >
-              {loading ? "Assignation..." : "Assigner l'Abonnement"}
+              {assignLoading ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  Attribution en cours...
+                </>
+              ) : (
+                "Attribuer le Plan"
+              )}
             </Button>
           )}
         </DialogFooter>
