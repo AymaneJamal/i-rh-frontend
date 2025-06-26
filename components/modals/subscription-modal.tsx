@@ -26,7 +26,7 @@ import { useSubscriptionPlans } from "@/hooks/use-subscription-plans"
 import { useTenantSubscription } from "@/hooks/use-tenant-subscription"
 import { validateFileUpload, validatePaymentInfo } from "@/lib/validators"
 import { formatCurrency } from "@/lib/formatters"
-import { PAYMENT_METHODS } from "@/lib/constants"
+import { PAYMENT_METHODS, Currency } from "@/lib/constants"
 import { CreditCard, Upload, FileText, AlertCircle, CheckCircle, Crown, Zap, Users, HardDrive, X } from "lucide-react"
 
 interface SubscriptionModalProps {
@@ -65,54 +65,51 @@ export function SubscriptionModal({
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    setError(null)
-
-    if (!file) {
-      setReceiptFile(null)
-      return
+    if (file) {
+      const validation = validateFileUpload(file, 'receipt')
+      if (!validation.isValid) {
+        setError(validation.errors[0])
+        return
+      }
+      setReceiptFile(file)
+      setError(null)
     }
-
-    const validation = validateFileUpload(file, 'receipt')
-    if (!validation.isValid) {
-      setError(validation.errors[0])
-      return
-    }
-    
-    setReceiptFile(file)
   }
 
-  const handleAssignSubscription = async () => {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
     if (!selectedPlan || !paymentMethod || !paymentReference || !receiptFile) {
-      setError("Veuillez remplir tous les champs et joindre un reçu")
+      setError("Tous les champs sont requis")
       return
     }
 
-    const paymentValidation = validatePaymentInfo(100, paymentMethod, paymentReference)
+    const paymentValidation = validatePaymentInfo(
+      selectedPlanDetails?.monthlyPrice || 0,
+      paymentMethod,
+      paymentReference
+    )
+
     if (!paymentValidation.isValid) {
       setError(paymentValidation.errors[0])
       return
     }
 
-    setError(null)
-
     try {
-      const success = await assignPlan(
+      setError(null)
+      await assignPlan(
         tenantId,
         selectedPlan,
         paymentMethod as any,
         paymentReference,
         receiptFile
       )
-
-      if (success) {
-        setSuccess(true)
-        setTimeout(() => {
-          onSubscriptionAssigned()
-          resetForm()
-        }, 2000)
-      }
+      setSuccess(true)
+      setTimeout(() => {
+        onSubscriptionAssigned()
+      }, 2000)
     } catch (err: any) {
-      setError(err.message || "Erreur lors de l'attribution du plan")
+      setError(err.response?.data?.error || err.message || "Erreur lors de l'attribution du plan")
     }
   }
 
@@ -126,49 +123,36 @@ export function SubscriptionModal({
   }
 
   const handleClose = () => {
-    if (!assignLoading) {
-      resetForm()
-      onClose()
-    }
+    resetForm()
+    onClose()
   }
 
   const getPlanIcon = (planId: string) => {
-    const plan = plans.find(p => p.planId === planId)
-    if (!plan) return <Crown className="h-5 w-5" />
-    
-    switch (plan.category) {
-      case "BASIC": return <Zap className="h-5 w-5" />
-      case "PREMIUM": return <Users className="h-5 w-5" />
-      case "ENTERPRISE": return <Crown className="h-5 w-5" />
-      default: return <CreditCard className="h-5 w-5" />
-    }
+    if (planId.toLowerCase().includes('basic')) return <Users className="h-5 w-5 text-blue-500" />
+    if (planId.toLowerCase().includes('premium')) return <Zap className="h-5 w-5 text-purple-500" />
+    if (planId.toLowerCase().includes('enterprise')) return <Crown className="h-5 w-5 text-yellow-500" />
+    return <FileText className="h-5 w-5 text-gray-500" />
   }
 
   const getPlanColor = (category: string) => {
-    switch (category) {
-      case "BASIC": return "border-blue-200 bg-blue-50"
-      case "PREMIUM": return "border-purple-200 bg-purple-50"
-      case "ENTERPRISE": return "border-yellow-200 bg-yellow-50"
-      default: return "border-gray-200 bg-gray-50"
+    switch (category?.toLowerCase()) {
+      case 'basic': return 'text-blue-600'
+      case 'premium': return 'text-purple-600'
+      case 'enterprise': return 'text-yellow-600'
+      default: return 'text-gray-600'
     }
   }
 
-  useEffect(() => {
-    if (!isOpen) {
-      resetForm()
-    }
-  }, [isOpen])
-
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center space-x-2">
-            <CreditCard className="h-5 w-5" />
+            <CreditCard className="h-6 w-6 text-blue-600" />
             <span>Attribuer un Plan d'Abonnement</span>
           </DialogTitle>
           <DialogDescription>
-            Sélectionnez un plan d'abonnement pour <strong>{tenantName}</strong>
+            Attribuer un plan d'abonnement au tenant <strong>{tenantName}</strong>
           </DialogDescription>
         </DialogHeader>
 
@@ -220,32 +204,28 @@ export function SubscriptionModal({
                         </div>
                         
                         <div className="mb-3">
-                          <span className="text-2xl font-bold">{formatCurrency(plan.monthlyPrice, plan.currency)}</span>
+                          <span className="text-2xl font-bold">{formatCurrency(plan.monthlyPrice, plan.currency as Currency)}</span>
                           <span className="text-gray-500">/mois</span>
                         </div>
                         
-                        <div className="space-y-1 text-sm">
+                        <div className="space-y-1 text-sm text-gray-600">
                           <div className="flex items-center space-x-2">
-                            <Users className="h-3 w-3 text-green-500" />
-                            <span>{plan.maxUsers} utilisateurs max</span>
+                            <Users className="h-4 w-4 text-gray-500" />
+                            <span>{plan.maxUsers === -1 ? "Illimité" : plan.maxUsers} utilisateurs</span>
                           </div>
                           <div className="flex items-center space-x-2">
-                            <HardDrive className="h-3 w-3 text-green-500" />
+                            <HardDrive className="h-4 w-4 text-gray-500" />
                             <span>{Math.floor(plan.maxDatabaseStorageMB / 1024)}GB base de données</span>
                           </div>
-                          {plan.hasAdvancedReporting === 1 && (
-                            <div className="flex items-center space-x-2">
-                              <CheckCircle className="h-3 w-3 text-green-500" />
-                              <span>Rapports avancés</span>
-                            </div>
-                          )}
-                          {plan.hasApiAccess === 1 && (
-                            <div className="flex items-center space-x-2">
-                              <CheckCircle className="h-3 w-3 text-green-500" />
-                              <span>Accès API</span>
-                            </div>
-                          )}
+                          <div className="flex items-center space-x-2">
+                            <HardDrive className="h-4 w-4 text-gray-500" />
+                            <span>{Math.floor(plan.maxS3StorageMB / 1024)}GB stockage S3</span>
+                          </div>
                         </div>
+                        
+                        {plan.isRecommended === 1 && (
+                          <Badge className="mt-2" variant="secondary">Recommandé</Badge>
+                        )}
                       </CardContent>
                     </Card>
                   ))}
@@ -253,12 +233,12 @@ export function SubscriptionModal({
               )}
             </div>
 
-            {/* Plan Details */}
+            {/* Selected Plan Summary */}
             {selectedPlanDetails && (
-              <Card className="bg-gray-50">
+              <Card className="bg-blue-50 border-blue-200">
                 <CardContent className="p-4">
-                  <h4 className="font-semibold mb-2">Détails du Plan Sélectionné</h4>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                  <h4 className="font-semibold mb-3 text-blue-900">Plan Sélectionné: {selectedPlanDetails.planName}</h4>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
                     <div className="flex items-center space-x-2">
                       <Users className="h-4 w-4 text-gray-500" />
                       <span>{selectedPlanDetails.maxUsers === -1 ? "Illimité" : selectedPlanDetails.maxUsers} utilisateurs</span>
@@ -273,7 +253,7 @@ export function SubscriptionModal({
                     </div>
                     <div className="flex items-center space-x-2">
                       <span className="text-lg font-bold text-green-600">
-                        {formatCurrency(selectedPlanDetails.monthlyPrice, selectedPlanDetails.currency)}/mois
+                        {formatCurrency(selectedPlanDetails.monthlyPrice, selectedPlanDetails.currency as Currency)}/mois
                       </span>
                     </div>
                   </div>
@@ -336,28 +316,22 @@ export function SubscriptionModal({
                     />
                   </div>
                 </div>
-                
                 {receiptFile && (
-                  <div className="mt-4 flex items-center justify-between p-2 bg-green-50 rounded border border-green-200">
-                    <div className="flex items-center space-x-2">
-                      <FileText className="h-4 w-4 text-green-600" />
-                      <span className="text-sm text-green-700">{receiptFile.name}</span>
-                    </div>
+                  <div className="mt-4 flex items-center justify-center space-x-2">
+                    <FileText className="h-5 w-5 text-green-600" />
+                    <span className="text-sm text-green-600">{receiptFile.name}</span>
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
                       onClick={() => setReceiptFile(null)}
-                      className="h-6 w-6 p-0"
+                      disabled={assignLoading}
                     >
                       <X className="h-4 w-4" />
                     </Button>
                   </div>
                 )}
               </div>
-              <p className="text-xs text-gray-500">
-                Le reçu de paiement est obligatoire pour valider l'attribution du plan.
-              </p>
             </div>
           </div>
         )}
@@ -368,18 +342,10 @@ export function SubscriptionModal({
           </Button>
           {!success && (
             <Button
-              onClick={handleAssignSubscription}
-              disabled={!selectedPlan || !paymentMethod || !paymentReference || !receiptFile || assignLoading}
-              className="bg-blue-600 hover:bg-blue-700"
+              onClick={handleSubmit}
+              disabled={assignLoading || !selectedPlan || !paymentMethod || !paymentReference || !receiptFile}
             >
-              {assignLoading ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  Attribution en cours...
-                </>
-              ) : (
-                "Attribuer le Plan"
-              )}
+              {assignLoading ? "Attribution..." : "Attribuer le Plan"}
             </Button>
           )}
         </DialogFooter>

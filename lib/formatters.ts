@@ -164,6 +164,30 @@ export const formatTimeRemaining = (
   return "Moins d'une minute"
 }
 
+export const formatDuration = (
+  milliseconds: number | null | undefined
+): string => {
+  if (milliseconds === null || milliseconds === undefined || milliseconds <= 0) {
+    return "N/A"
+  }
+
+  const days = Math.floor(milliseconds / (24 * 60 * 60 * 1000))
+  const hours = Math.floor((milliseconds % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000))
+  const minutes = Math.floor((milliseconds % (60 * 60 * 1000)) / (60 * 1000))
+
+  if (days > 0) {
+    return `${days} jour${days > 1 ? 's' : ''}`
+  }
+  if (hours > 0) {
+    return `${hours} heure${hours > 1 ? 's' : ''}`
+  }
+  if (minutes > 0) {
+    return `${minutes} minute${minutes > 1 ? 's' : ''}`
+  }
+  
+  return "Moins d'une minute"
+}
+
 export const formatDaysUntilExpiry = (
   expiryTimestamp: number | null | undefined
 ): number => {
@@ -392,6 +416,9 @@ export const formatFileSize = (bytes: number | null | undefined): string => {
   
   return `${(bytes / Math.pow(1024, i)).toFixed(2)} ${sizes[i]}`
 }
+
+// Alias for formatFileSize for compatibility
+export const formatBytes = formatFileSize
 
 export const formatFileSizeFromMB = (mb: number | null | undefined): string => {
   if (mb === null || mb === undefined) {

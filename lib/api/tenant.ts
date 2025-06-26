@@ -1,6 +1,6 @@
 // lib/api/tenant.ts
 import { apiClient } from "@/lib/api-client"
-import { TenantResponse, TenantFilters, TenantDetailResponse, AssignSubscriptionRequest } from "@/types/tenant"
+import { TenantResponse, TenantFilters, TenantDetailResponse, AssignSubscriptionRequest, CreateTenantRequest, TenantCreationResponse } from "@/types/tenant"
 
 export const tenantApi = {
   /**
@@ -55,6 +55,30 @@ export const tenantApi = {
         statusText: error.response?.statusText,
         data: error.response?.data,
         url: error.config?.url
+      })
+      throw error
+    }
+  },
+
+  /**
+   * Create a new tenant
+   */
+  createTenant: async (tenantData: CreateTenantRequest): Promise<TenantCreationResponse> => {
+    try {
+      console.log("🏢 Creating new tenant:", tenantData.tenantName)
+
+      const response = await apiClient.post(`/api/tenants`, tenantData)
+      
+      console.log("✅ Tenant created successfully:", response.data)
+      return response.data
+    } catch (error: any) {
+      console.error("❌ Failed to create tenant:", error)
+      console.error("❌ Error details:", {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        url: error.config?.url,
+        requestData: tenantData
       })
       throw error
     }

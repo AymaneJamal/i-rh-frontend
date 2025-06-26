@@ -123,6 +123,12 @@ export interface TenantDetails {
   domains: string[]
   autoProlangedAt: number | null
   manuallyProlangedAt: number | null
+
+  // ===== PLAN LIMITS =====
+  maxUsers: number
+  maxEmployees: number
+  maxDatabaseStorageMB: number
+  maxS3StorageMB: number
 }
 
 export interface AdminUser {
@@ -182,16 +188,20 @@ export interface CreateTenantRequest {
 
 export interface TenantCreationResponse {
   success: boolean
-  tenantId: string
-  tenantName: string
-  adminUserId: string
-  adminEmail: string
-  databaseUrl: string
-  s3BucketName: string
-  status: string
+  data: {
+    success: boolean
+    tenantId: string
+    tenantName: string
+    adminUserId: string
+    adminEmail: string
+    databaseUrl: string
+    s3BucketName: string
+    status: string
+    message: string
+    error: string | null
+    createdAt: number
+  }
   message: string
-  error: string | null
-  createdAt: number
 }
 
 // ===============================================================================
@@ -325,15 +335,4 @@ export interface BulkTenantOperation {
   operation: 'SUSPEND' | 'REACTIVATE' | 'RENEW' | 'CHANGE_PLAN'
   reason?: string
   newPlanId?: string
-}
-
-export interface BulkOperationResult {
-  success: boolean
-  processed: number
-  failed: number
-  results: {
-    tenantId: string
-    success: boolean
-    error?: string
-  }[]
 }
