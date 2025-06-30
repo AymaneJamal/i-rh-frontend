@@ -66,8 +66,11 @@ export const tenantApi = {
   createTenant: async (tenantData: CreateTenantRequest): Promise<TenantCreationResponse> => {
     try {
       console.log("🏢 Creating new tenant:", tenantData.tenantName)
+      console.log("🔍 Tenant data:", tenantData)
 
-      const response = await apiClient.post(`/api/tenants`, tenantData)
+      const response = await apiClient.post(`/api/tenants`, tenantData, {
+        includeUserEmail: true // Add X-User-Email header automatically
+      })
       
       console.log("✅ Tenant created successfully:", response.data)
       return response.data
@@ -138,6 +141,7 @@ export const tenantApi = {
         `/api/tenants/${request.tenantId}/subscription`,
         formData,
         {
+          includeUserEmail: true,
           headers: {
             'Content-Type': 'multipart/form-data',
           },

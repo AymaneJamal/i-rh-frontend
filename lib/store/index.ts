@@ -15,3 +15,8 @@ export const store = configureStore({
 
 export type RootState = ReturnType<typeof store.getState>
 export type AppDispatch = typeof store.dispatch
+
+// Exposer le store globalement pour l'API client
+if (typeof window !== 'undefined') {
+  (window as any).__REDUX_STORE__ = store
+}

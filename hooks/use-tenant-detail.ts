@@ -1,12 +1,11 @@
 // hooks/use-tenant-detail.ts
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { TenantDetails, AdminUser } from "@/types/tenant"
 import { tenantApi } from "@/lib/api/tenant"
 import { tenantSubscriptionApi } from "@/lib/api/tenant-subscription"
 import { TenantUsageResponse, TenantStatusResponse } from "@/types/tenant-subscription"
-import { createTenantStatusPolling, createUsageMonitoringPolling, PollingManager } from "@/lib/polling-config"
 
-export const useTenantDetail = (tenantId: string, enablePolling: boolean = true) => {
+export const useTenantDetail = (tenantId: string, enablePolling: boolean = false) => {
   const [tenant, setTenant] = useState<TenantDetails | null>(null)
   const [adminUser, setAdminUser] = useState<AdminUser | null>(null)
   const [loading, setLoading] = useState(true)
@@ -19,9 +18,37 @@ export const useTenantDetail = (tenantId: string, enablePolling: boolean = true)
   const [statusLoading, setStatusLoading] = useState(false)
   const [usageLoading, setUsageLoading] = useState(false)
   
-  // Polling managers
-  const [statusPollingManager, setStatusPollingManager] = useState<PollingManager | null>(null)
-  const [usagePollingManager, setUsagePollingManager] = useState<PollingManager | null>(null)
+  // Polling state
+  const [isPollingActive, setIsPollingActive] = useState(false)
+  const statusIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  const usageIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  const mountedRef = useRef(true)
+
+  // ===============================================================================
+  // COMPUTED VALUES
+  // ===============================================================================
+  
+  const isAvailable = tenant ? Date.now() > (tenant.createdAt + 10 * 60 * 1000) : true
+  const remainingTime = tenant ? Math.max(0, (tenant.createdAt + 10 * 60 * 1000) - Date.now()) : 0
+  
+  // Subscription status
+  const hasSubscription = Boolean(tenant?.plan?.id)
+  const hasUsageAlerts = usageData?.hasAlerts === 1 && usageData?.activeWarnings?.length > 0
+  const isInGracePeriod = tenant?.isInGracePeriod === 1
+  const isSuspended = tenant?.status === "SUSPENDED"
+  const isExpired = tenant?.planExpiryDate ? Date.now() > tenant.planExpiryDate : false
+
+  // Usage percentages
+  const usagePercentages = usageData ? {
+    database: usageData.usagePercentages.databasePercent,
+    s3: usageData.usagePercentages.s3Percent,
+    users: usageData.usagePercentages.usersPercent,
+    employees: usageData.usagePercentages.employeesPercent
+  } : null
+
+  // Days until expiry
+  const daysUntilExpiry = tenant?.planExpiryDate ? 
+    Math.floor((tenant.planExpiryDate - Date.now()) / (24 * 60 * 60 * 1000)) : null
 
   // ===============================================================================
   // FETCH TENANT DETAILS
@@ -56,10 +83,10 @@ export const useTenantDetail = (tenantId: string, enablePolling: boolean = true)
   }, [tenantId, refreshTrigger])
 
   // ===============================================================================
-  // FETCH SUBSCRIPTION STATUS
+  // FETCH SUBSCRIPTION STATUS (with error handling)
   // ===============================================================================
   const fetchSubscriptionStatus = useCallback(async () => {
-    if (!tenantId) return
+    if (!tenantId || !mountedRef.current) return
 
     try {
       setStatusLoading(true)
@@ -67,23 +94,28 @@ export const useTenantDetail = (tenantId: string, enablePolling: boolean = true)
       
       const response = await tenantSubscriptionApi.checkTenantStatus(tenantId)
       
-      if (response.success && response.data) {
+      if (response.success && response.data && mountedRef.current) {
         setSubscriptionStatus(response.data.status)
         console.log("✅ Subscription status updated:", response.data.status)
       }
     } catch (err: any) {
       console.error("❌ Failed to fetch subscription status:", err)
-      // Don't set main error state for status failures
+      // Don't set main error state for status failures - just log
+      if (mountedRef.current) {
+        setSubscriptionStatus(null)
+      }
     } finally {
-      setStatusLoading(false)
+      if (mountedRef.current) {
+        setStatusLoading(false)
+      }
     }
   }, [tenantId])
 
   // ===============================================================================
-  // FETCH USAGE DATA
+  // FETCH USAGE DATA (with error handling)
   // ===============================================================================
   const fetchUsageData = useCallback(async () => {
-    if (!tenantId) return
+    if (!tenantId || !mountedRef.current) return
 
     try {
       setUsageLoading(true)
@@ -91,144 +123,116 @@ export const useTenantDetail = (tenantId: string, enablePolling: boolean = true)
       
       const response = await tenantSubscriptionApi.getTenantUsage(tenantId)
       
-      if (response.success && response.data) {
+      if (response.success && response.data && mountedRef.current) {
         setUsageData(response.data)
         console.log("✅ Usage data updated")
       }
     } catch (err: any) {
       console.error("❌ Failed to fetch usage data:", err)
-      // Don't set main error state for usage failures
+      // Don't set main error state for usage failures - just log
+      if (mountedRef.current) {
+        setUsageData(null)
+      }
     } finally {
-      setUsageLoading(false)
+      if (mountedRef.current) {
+        setUsageLoading(false)
+      }
     }
   }, [tenantId])
 
   // ===============================================================================
-  // SETUP POLLING
+  // POLLING MANAGEMENT
   // ===============================================================================
-  const setupPolling = useCallback(() => {
-    if (!enablePolling || !tenantId) return
+  const startPolling = useCallback(() => {
+    if (isPollingActive || !enablePolling || !tenantId) return
 
-    // Stop existing polling
-    statusPollingManager?.stop()
-    usagePollingManager?.stop()
+    console.log("🔄 Starting polling for tenant:", tenantId)
+    setIsPollingActive(true)
 
-    // Create status polling
-    const statusManager = createTenantStatusPolling(
-      tenantId,
-      tenantSubscriptionApi.checkTenantStatus,
-      (newStatus) => {
-        console.log(`🔄 Status changed for tenant ${tenantId}:`, newStatus)
-        setSubscriptionStatus(newStatus)
-        
-        // Refresh tenant details if status changed significantly
-        if (['SUSPENDED', 'ACTIVE'].includes(newStatus)) {
-          refresh()
-        }
+    // Status polling every 10 minutes
+    statusIntervalRef.current = setInterval(() => {
+      if (mountedRef.current) {
+        fetchSubscriptionStatus()
       }
-    )
+    }, 10 * 60 * 1000) // 10 minutes
 
-    // Create usage polling
-    const usageManager = createUsageMonitoringPolling(
-      tenantId,
-      tenantSubscriptionApi.getTenantUsage,
-      (alerts) => {
-        console.log(`⚠️ New usage alerts for tenant ${tenantId}:`, alerts)
-        // Could trigger notifications here
+    // Usage polling every 15 minutes  
+    usageIntervalRef.current = setInterval(() => {
+      if (mountedRef.current) {
+        fetchUsageData()
       }
-    )
+    }, 15 * 60 * 1000) // 15 minutes
 
-    setStatusPollingManager(statusManager)
-    setUsagePollingManager(usageManager)
+    // Initial fetch
+    fetchSubscriptionStatus()
+    fetchUsageData()
+  }, [enablePolling, tenantId, isPollingActive, fetchSubscriptionStatus, fetchUsageData])
 
-    // Start polling
-    statusManager.start()
-    usageManager.start()
-
-    console.log("🔄 Polling setup complete for tenant:", tenantId)
-  }, [enablePolling, tenantId, statusPollingManager, usagePollingManager])
-
-  // ===============================================================================
-  // EFFECTS
-  // ===============================================================================
-  
-  // Fetch initial data
-  useEffect(() => {
-    fetchTenantDetail()
-  }, [fetchTenantDetail])
-
-  // Fetch subscription data when tenant is loaded
-  useEffect(() => {
-    if (tenant) {
-      fetchSubscriptionStatus()
-      fetchUsageData()
+  const stopPolling = useCallback(() => {
+    console.log("⏹️ Stopping polling")
+    setIsPollingActive(false)
+    
+    if (statusIntervalRef.current) {
+      clearInterval(statusIntervalRef.current)
+      statusIntervalRef.current = null
     }
-  }, [tenant, fetchSubscriptionStatus, fetchUsageData])
-
-  // Setup polling when tenant is loaded
-  useEffect(() => {
-    if (tenant && enablePolling) {
-      setupPolling()
+    
+    if (usageIntervalRef.current) {
+      clearInterval(usageIntervalRef.current)
+      usageIntervalRef.current = null
     }
-
-    // Cleanup on unmount or tenant change
-    return () => {
-      statusPollingManager?.stop()
-      usagePollingManager?.stop()
-    }
-  }, [tenant, setupPolling])
+  }, [])
 
   // ===============================================================================
-  // ACTIONS
+  // REFRESH FUNCTIONS
   // ===============================================================================
-
   const refresh = useCallback(() => {
     setRefreshTrigger(prev => prev + 1)
   }, [])
 
   const refreshSubscriptionData = useCallback(() => {
-    fetchSubscriptionStatus()
-    fetchUsageData()
-  }, [fetchSubscriptionStatus, fetchUsageData])
-
-  const startPolling = useCallback(() => {
-    statusPollingManager?.start()
-    usagePollingManager?.start()
-  }, [statusPollingManager, usagePollingManager])
-
-  const stopPolling = useCallback(() => {
-    statusPollingManager?.stop()
-    usagePollingManager?.stop()
-  }, [statusPollingManager, usagePollingManager])
-
-  const isPollingActive = useCallback(() => {
-    return statusPollingManager?.isRunning() || usagePollingManager?.isRunning()
-  }, [statusPollingManager, usagePollingManager])
+    if (tenantId) {
+      fetchSubscriptionStatus()
+      // fetchUsageData()
+    }
+  }, [tenantId, fetchSubscriptionStatus, fetchUsageData])
 
   // ===============================================================================
-  // COMPUTED VALUES
+  // EFFECTS
   // ===============================================================================
+  
+  // Set mounted ref
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
-  const isAvailable = true // Removed 10-minute restriction as requested
-  const remainingTime = 0
+  // Fetch initial tenant data
+  useEffect(() => {
+    fetchTenantDetail()
+  }, [fetchTenantDetail])
 
-  const hasSubscription = tenant?.plan !== null
-  const hasUsageAlerts = usageData?.hasAlerts === 1
-  const isInGracePeriod = tenant?.isInGracePeriod === 1
-  const isSuspended = tenant?.status === 'SUSPENDED'
-  const isExpired = tenant?.planExpiryDate ? Date.now() > tenant.planExpiryDate : false
+  // Setup polling when tenant is loaded and available
+  useEffect(() => {
+    if (tenant && isAvailable && enablePolling && !isPollingActive) {
+      startPolling()
+    } else if ((!tenant || !isAvailable || !enablePolling) && isPollingActive) {
+      stopPolling()
+    }
 
-  // Usage percentages
-  const usagePercentages = usageData ? {
-    database: usageData.usagePercentages.databasePercent,
-    s3: usageData.usagePercentages.s3Percent,
-    users: usageData.usagePercentages.usersPercent,
-    employees: usageData.usagePercentages.employeesPercent
-  } : null
+    return () => {
+      stopPolling()
+    }
+  }, [tenant, isAvailable, enablePolling, isPollingActive, startPolling, stopPolling])
 
-  // Days until expiry
-  const daysUntilExpiry = tenant?.planExpiryDate ? 
-    Math.floor((tenant.planExpiryDate - Date.now()) / (24 * 60 * 60 * 1000)) : null
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      stopPolling()
+    }
+  }, [stopPolling])
 
   // ===============================================================================
   // RETURN HOOK DATA
@@ -273,7 +277,7 @@ export const useTenantDetail = (tenantId: string, enablePolling: boolean = true)
 }
 
 // ===============================================================================
-// TENANT STATUS MONITORING HOOK
+// TENANT STATUS MONITORING HOOK (simplified)
 // ===============================================================================
 
 export const useTenantStatusMonitoring = (tenantIds: string[]) => {
@@ -291,119 +295,35 @@ export const useTenantStatusMonitoring = (tenantIds: string[]) => {
       const statusPromises = tenantIds.map(async (tenantId) => {
         try {
           const response = await tenantSubscriptionApi.checkTenantStatus(tenantId)
-          return { tenantId, status: response.data.status }
+          return { [tenantId]: response.data.status }
         } catch (error) {
           console.error(`Failed to check status for tenant ${tenantId}:`, error)
-          return { tenantId, status: 'ERROR' }
+          return { [tenantId]: 'UNKNOWN' }
         }
       })
 
       const results = await Promise.all(statusPromises)
-      
-      const statusMap: Record<string, string> = {}
-      results.forEach(({ tenantId, status }) => {
-        statusMap[tenantId] = status
-      })
+      const statusMap = results.reduce((acc, curr) => ({ ...acc, ...curr }), {})
       
       setStatuses(statusMap)
     } catch (err: any) {
-      console.error("❌ Error checking tenant statuses:", err)
       setError(err.message || "Failed to check tenant statuses")
     } finally {
       setLoading(false)
     }
   }, [tenantIds])
 
+  // Check statuses when tenantIds change
   useEffect(() => {
-    checkAllStatuses()
-  }, [checkAllStatuses])
-
-  const getStatusForTenant = useCallback((tenantId: string): string | null => {
-    return statuses[tenantId] || null
-  }, [statuses])
-
-  const getCriticalTenants = useCallback((): string[] => {
-    return Object.entries(statuses)
-      .filter(([_, status]) => ['CRITICAL', 'GRACE_PERIOD', 'SUSPENDED'].includes(status))
-      .map(([tenantId, _]) => tenantId)
-  }, [statuses])
-
-  const refresh = useCallback(() => {
-    checkAllStatuses()
-  }, [checkAllStatuses])
+    if (tenantIds.length > 0) {
+      checkAllStatuses()
+    }
+  }, [tenantIds, checkAllStatuses])
 
   return {
     statuses,
     loading,
     error,
-    getStatusForTenant,
-    getCriticalTenants,
-    refresh
-  }
-}
-
-// ===============================================================================
-// TENANT USAGE MONITORING HOOK
-// ===============================================================================
-
-export const useTenantUsageMonitoring = (tenantId: string) => {
-  const [usageData, setUsageData] = useState<TenantUsageResponse['data'] | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [alerts, setAlerts] = useState<string[]>([])
-
-  const fetchUsage = useCallback(async () => {
-    if (!tenantId) return
-
-    try {
-      setLoading(true)
-      setError(null)
-      
-      const response = await tenantSubscriptionApi.getTenantUsage(tenantId)
-      
-      if (response.success && response.data) {
-        setUsageData(response.data)
-        setAlerts(response.data.activeWarnings)
-      }
-    } catch (err: any) {
-      console.error("❌ Error fetching usage data:", err)
-      setError(err.message || "Failed to fetch usage data")
-    } finally {
-      setLoading(false)
-    }
-  }, [tenantId])
-
-  useEffect(() => {
-    fetchUsage()
-  }, [fetchUsage])
-
-  const hasAlerts = alerts.length > 0
-  const hasNewAlerts = useCallback((previousAlerts: string[]): boolean => {
-    return alerts.some(alert => !previousAlerts.includes(alert))
-  }, [alerts])
-
-  const getUsageLevel = useCallback((type: 'database' | 's3' | 'users' | 'employees'): 'normal' | 'warning' | 'critical' => {
-    if (!usageData) return 'normal'
-
-    const percentage = usageData.usagePercentages[`${type}Percent`]
-    
-    if (percentage >= 95) return 'critical'
-    if (percentage >= 80) return 'warning'
-    return 'normal'
-  }, [usageData])
-
-  const refresh = useCallback(() => {
-    fetchUsage()
-  }, [fetchUsage])
-
-  return {
-    usageData,
-    loading,
-    error,
-    alerts,
-    hasAlerts,
-    hasNewAlerts,
-    getUsageLevel,
-    refresh
+    refresh: checkAllStatuses
   }
 }

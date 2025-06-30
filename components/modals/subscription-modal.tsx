@@ -28,6 +28,7 @@ import { validateFileUpload, validatePaymentInfo } from "@/lib/validators"
 import { formatCurrency } from "@/lib/formatters"
 import { PAYMENT_METHODS, Currency } from "@/lib/constants"
 import { CreditCard, Upload, FileText, AlertCircle, CheckCircle, Crown, Zap, Users, HardDrive, X } from "lucide-react"
+import { PaymentMethod } from "@/lib/constants"
 
 interface SubscriptionModalProps {
   isOpen: boolean
@@ -96,21 +97,25 @@ export function SubscriptionModal({
     }
 
     try {
-      setError(null)
-      await assignPlan(
-        tenantId,
-        selectedPlan,
-        paymentMethod as any,
-        paymentReference,
-        receiptFile
-      )
-      setSuccess(true)
-      setTimeout(() => {
-        onSubscriptionAssigned()
-      }, 2000)
-    } catch (err: any) {
-      setError(err.response?.data?.error || err.message || "Erreur lors de l'attribution du plan")
-    }
+  setError(null)
+  const result = await assignPlan(
+    tenantId,
+    selectedPlan,
+    paymentMethod as PaymentMethod,
+    paymentReference,
+    receiptFile
+  )
+  
+  if (result) {
+    setSuccess(true)
+    // Fermer immédiatement après succès
+    resetForm()
+    onClose()
+    onSubscriptionAssigned()
+  }
+} catch (err: any) {
+  setError(err.response?.data?.error || err.message || "Erreur lors de l'attribution du plan")
+}
   }
 
   const resetForm = () => {

@@ -168,16 +168,17 @@ export interface TenantDetailResponse {
 export interface CreateTenantRequest {
   // Tenant Information
   tenantName: string
-  industry?: string
-  region?: string
-  country?: string
-  city?: string
-  address?: string
-  phone?: string
-  billingEmail?: string
-  timeZone?: string
-  language?: string
-  createdBy?: string
+  industry: string
+  region: string
+  country: string
+  city: string
+  address: string
+  postalCode?: string // Nouveau champ
+  phone: string
+  billingEmail: string
+  timeZone: string
+  language: string
+  legalNumbers?: Record<string, string> // Nouveau champ dynamique
   
   // Admin Information
   adminEmail: string
@@ -194,11 +195,10 @@ export interface TenantCreationResponse {
     tenantName: string
     adminUserId: string
     adminEmail: string
-    databaseUrl: string
     s3BucketName: string
     status: string
     message: string
-    error: string | null
+    error: any
     createdAt: number
   }
   message: string

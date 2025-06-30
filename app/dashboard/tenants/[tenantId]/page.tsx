@@ -10,12 +10,15 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Separator } from "@/components/ui/separator"
 import { Progress } from "@/components/ui/progress"
 import { SubscriptionModal } from "@/components/modals/subscription-modal"
+import { SuspendTenantModal } from "@/components/modals/suspend-tenant-modal"
+import { ReactivateTenantModal } from "@/components/modals/reactivate-tenant-modal"
 import { useTenantDetail } from "@/hooks/use-tenant-detail"
 import { useTenantSubscription } from "@/hooks/use-tenant-subscription"
 import { useTenantInvoices } from "@/hooks/use-tenant-invoices"
 import { tenantSubscriptionApi } from "@/lib/api/tenant-subscription"
 import { formatCurrency, formatDate, formatDuration } from "@/lib/formatters"
 import { formatBytes } from "@/lib/utils"
+import { Currency } from "@/lib/constants"
 import {
   ArrowLeft,
   Building2,
@@ -52,6 +55,7 @@ interface TenantActionCardProps {
 
 function TenantActionCard({ tenant, onSuspend, onReactivate, onAssignPlan, loading }: TenantActionCardProps) {
   const isActive = tenant?.status === "ACTIVE"
+  const isSuspended = tenant?.status === "SUSPENDED"
   const hasPlan = tenant?.plan?.id
 
   return (
@@ -74,137 +78,231 @@ function TenantActionCard({ tenant, onSuspend, onReactivate, onAssignPlan, loadi
         
         {isActive ? (
           <Button 
+            variant="destructive" 
             onClick={onSuspend} 
             disabled={loading}
-            variant="destructive"
             className="w-full"
           >
             <Pause className="h-4 w-4 mr-2" />
-            Suspendre Tenant
+            Suspendre
           </Button>
-        ) : (
+        ) : isSuspended ? (
           <Button 
+            variant="default" 
             onClick={onReactivate} 
             disabled={loading}
             className="w-full bg-green-600 hover:bg-green-700"
           >
             <Play className="h-4 w-4 mr-2" />
-            Réactiver Tenant
+            Réactiver
           </Button>
-        )}
+        ) : null}
       </CardContent>
     </Card>
   )
 }
 
 export default function TenantDetailPage() {
-  const router = useRouter()
   const params = useParams()
+  const router = useRouter()
   const tenantId = params.tenantId as string
-  
-  const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState(false)
-  
+
+  // Modals state
+  const [showSubscriptionModal, setShowSubscriptionModal] = useState(false)
+  const [showSuspendModal, setShowSuspendModal] = useState(false)
+  const [showReactivateModal, setShowReactivateModal] = useState(false)
+  const [actionLoading, setActionLoading] = useState(false)
+
+  // Hooks
   const {
     tenant,
     adminUser,
     loading,
     error,
-    refresh
-  } = useTenantDetail(tenantId, false) // Désactiver le polling
+    isAvailable,
+    remainingTime,
+    subscriptionStatus,
+    usageData,
+    statusLoading,
+    usageLoading,
+    hasSubscription,
+    hasUsageAlerts,
+    isInGracePeriod,
+    isSuspended,
+    isExpired,
+    usagePercentages,
+    daysUntilExpiry,
+    refresh,
+    refreshSubscriptionData
+  } = useTenantDetail(tenantId, false) // POLLING DISABLED
 
-  const {
-    loading: actionLoading,
-    suspendTenant,
-    reactivateTenant
-  } = useTenantSubscription()
+  const { assignPlan } = useTenantSubscription()
+  const { invoices, loading: invoicesLoading, refresh: refreshInvoices } = useTenantInvoices(tenantId)
 
-  const {
-    invoices,
-    loading: invoicesLoading,
-    refresh: refreshInvoices
-  } = useTenantInvoices(tenantId)
+  // ===============================================================================
+  // STATUS HELPERS
+  // ===============================================================================
 
-  const handleBack = () => {
-    router.push("/dashboard/tenants")
+  const getStatusBadge = (status: string) => {
+    const statusMappings: Record<string, "default" | "destructive" | "outline" | "secondary"> = {
+      ACTIVE: "default",
+      SUSPENDED: "destructive", 
+      GRACE_PERIOD: "secondary",
+      EXPIRED: "destructive",
+      PENDING: "outline"
+    }
+    
+    const variant = statusMappings[status] || "outline"
+    
+    return (
+      <Badge variant={variant}>
+        {status}
+      </Badge>
+    )
   }
 
-  const handleSuspend = async () => {
-    const reason = prompt("Raison de la suspension:")
-    if (reason) {
-      const success = await suspendTenant(tenantId, reason)
-      if (success) {
-        refresh()
-      }
+  const getSubscriptionBadge = (expiryDate: number | null) => {
+    if (!expiryDate) return <Badge variant="outline">Aucun plan</Badge>
+    
+    const now = Date.now()
+    const isExpired = now > expiryDate
+    
+    if (isExpired) {
+      return <Badge variant="destructive">Expiré</Badge>
+    }
+    
+    const daysLeft = Math.floor((expiryDate - now) / (24 * 60 * 60 * 1000))
+    
+    if (daysLeft <= 7) {
+      return <Badge variant="secondary">Expire dans {daysLeft} jour(s)</Badge>
+    }
+    
+    return <Badge variant="default">Actif</Badge>
+  }
+
+  // ===============================================================================
+  // ACTION HANDLERS
+  // ===============================================================================
+
+  const handleSuspendTenant = async (reason: string) => {
+    try {
+      setActionLoading(true)
+      await tenantSubscriptionApi.suspendTenant(tenantId, reason)
+      
+      // Refresh data
+      refresh()
+      refreshSubscriptionData()
+      
+    } catch (error: any) {
+      console.error("Failed to suspend tenant:", error)
+      throw error
+    } finally {
+      setActionLoading(false)
     }
   }
 
-  const handleReactivate = async () => {
-    const success = await reactivateTenant(tenantId)
-    if (success) {
+  const handleReactivateTenant = async (newPlanId?: string) => {
+    try {
+      setActionLoading(true)
+      await tenantSubscriptionApi.reactivateTenant(tenantId, newPlanId)
+      
+      // Refresh data
       refresh()
+      refreshSubscriptionData()
+      
+    } catch (error: any) {
+      console.error("Failed to reactivate tenant:", error)
+      throw error
+    } finally {
+      setActionLoading(false)
     }
   }
 
   const handleAssignPlan = () => {
-    setIsSubscriptionModalOpen(true)
+    setShowSubscriptionModal(true)
   }
 
   const handleSubscriptionAssigned = () => {
+    // Actualiser seulement les données principales, pas l'API usage qui fait erreur
     refresh()
-    refreshInvoices()
-    setIsSubscriptionModalOpen(false)
+    if (refreshInvoices) {
+      refreshInvoices()
+    }
+    // refreshSubscriptionData() : a remplacer pour prendre les subscription data une fois le backend et bien
   }
 
-  if (!tenantId) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="text-center">
-          <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">Requête invalide</h3>
-          <p className="text-gray-500 mb-4">L'ID du tenant est requis</p>
-          <Button onClick={handleBack}>
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Retour aux tenants
-          </Button>
-        </div>
-      </div>
-    )
+  // Manual refresh for subscription data
+  const handleRefreshUsageData = async () => {
+    refreshSubscriptionData()
   }
+
+  // ===============================================================================
+  // RENDER LOADING STATE
+  // ===============================================================================
 
   if (loading) {
     return (
       <ProtectedRoute requiredRole="ADMIN_PRINCIPAL">
-        <div className="flex items-center justify-center min-h-[400px]">
-          <div className="text-center">
-            <RefreshCw className="h-8 w-8 animate-spin text-blue-600 mx-auto mb-4" />
-            <p className="text-gray-500">Chargement des détails du tenant...</p>
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="flex flex-col items-center space-y-4">
+            <RefreshCw className="h-8 w-8 animate-spin text-blue-600" />
+            <p className="text-gray-600">Chargement des détails du tenant...</p>
           </div>
         </div>
       </ProtectedRoute>
     )
   }
 
+  // ===============================================================================
+  // RENDER ERROR STATE
+  // ===============================================================================
+
   if (error) {
     return (
       <ProtectedRoute requiredRole="ADMIN_PRINCIPAL">
         <div className="space-y-6">
-          <div className="flex items-center space-x-4">
-            <Button variant="ghost" onClick={handleBack}>
+          <div className="flex items-center">
+            <Button variant="ghost" onClick={() => router.push("/dashboard/tenants")}>
               <ArrowLeft className="h-4 w-4 mr-2" />
               Retour
             </Button>
           </div>
-          <Card className="border-red-200 bg-red-50">
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              Erreur lors du chargement des détails du tenant : {error}
+            </AlertDescription>
+          </Alert>
+        </div>
+      </ProtectedRoute>
+    )
+  }
+
+  // ===============================================================================
+  // RENDER UNAVAILABLE STATE
+  // ===============================================================================
+
+  if (!isAvailable) {
+    return (
+      <ProtectedRoute requiredRole="ADMIN_PRINCIPAL">
+        <div className="space-y-6">
+          <div className="flex items-center">
+            <Button variant="ghost" onClick={() => router.push("/dashboard/tenants")}>
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Retour
+            </Button>
+          </div>
+          <Card>
             <CardContent className="pt-6">
               <div className="text-center">
-                <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-red-900 mb-2">
-                  Erreur de chargement
-                </h3>
-                <p className="text-red-700 mb-4">{error}</p>
-                <Button onClick={() => refresh()}>
+                <Clock className="h-12 w-12 text-amber-500 mx-auto mb-4" />
+                <h3 className="text-lg font-semibold mb-2">Tenant en cours de traitement</h3>
+                <p className="text-gray-600 mb-4">
+                  Les détails du tenant seront disponibles dans {formatDuration(remainingTime)}
+                </p>
+                <Button onClick={refresh}>
                   <RefreshCw className="h-4 w-4 mr-2" />
-                  Réessayer
+                  Actualiser
                 </Button>
               </div>
             </CardContent>
@@ -218,68 +316,18 @@ export default function TenantDetailPage() {
     return (
       <ProtectedRoute requiredRole="ADMIN_PRINCIPAL">
         <div className="space-y-6">
-          <div className="flex items-center space-x-4">
-            <Button variant="ghost" onClick={handleBack}>
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Retour
-            </Button>
-          </div>
-          <Card className="border-yellow-200 bg-yellow-50">
-            <CardContent className="pt-6">
-              <div className="text-center">
-                <AlertCircle className="h-12 w-12 text-yellow-500 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-yellow-900 mb-2">
-                  Tenant non trouvé
-                </h3>
-                <p className="text-yellow-700 mb-4">
-                  Le tenant avec l'ID "{tenantId}" n'existe pas ou n'est pas accessible.
-                </p>
-                <Button onClick={handleBack}>
-                  <ArrowLeft className="h-4 w-4 mr-2" />
-                  Retour aux tenants
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>Tenant non trouvé</AlertDescription>
+          </Alert>
         </div>
       </ProtectedRoute>
     )
   }
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "ACTIVE":
-        return <Badge className="bg-green-100 text-green-800">Actif</Badge>
-      case "SUSPENDED":
-        return <Badge className="bg-red-100 text-red-800">Suspendu</Badge>
-      case "INACTIVE":
-        return <Badge className="bg-gray-100 text-gray-800">Inactif</Badge>
-      default:
-        return <Badge variant="secondary">{status}</Badge>
-    }
-  }
-
-  const getSubscriptionBadge = (expiryDate: number | null) => {
-    if (!expiryDate) {
-      return <Badge className="bg-red-100 text-red-800">Aucun Plan</Badge>
-    }
-    
-    const now = Date.now()
-    const daysUntilExpiry = Math.ceil((expiryDate - now) / (1000 * 60 * 60 * 24))
-    
-    if (daysUntilExpiry < 0) {
-      return <Badge className="bg-red-100 text-red-800">Expiré</Badge>
-    } else if (daysUntilExpiry <= 7) {
-      return <Badge className="bg-yellow-100 text-yellow-800">Expire Bientôt</Badge>
-    } else {
-      return <Badge className="bg-green-100 text-green-800">Actif</Badge>
-    }
-  }
-
-  const calculateUsagePercentage = (current: number, max: number) => {
-    if (max === 0 || max === -1) return 0
-    return Math.min((current / max) * 100, 100)
-  }
+  // ===============================================================================
+  // MAIN RENDER
+  // ===============================================================================
 
   return (
     <ProtectedRoute requiredRole="ADMIN_PRINCIPAL">
@@ -287,7 +335,7 @@ export default function TenantDetailPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
-            <Button variant="ghost" onClick={handleBack}>
+            <Button variant="ghost" onClick={() => router.push("/dashboard/tenants")}>
               <ArrowLeft className="h-4 w-4 mr-2" />
               Retour
             </Button>
@@ -301,13 +349,50 @@ export default function TenantDetailPage() {
           </div>
           <div className="flex items-center space-x-2">
             {getStatusBadge(tenant.status)}
-            {getSubscriptionBadge(tenant.planExpiryDate)}
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={handleRefreshUsageData}
+              disabled={statusLoading || usageLoading}
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${(statusLoading || usageLoading) ? 'animate-spin' : ''}`} />
+              Actualiser
+            </Button>
           </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Main Content */}
           <div className="lg:col-span-2 space-y-6">
+
+
+            {/* Suspension Info if suspended */}
+            {tenant.status === "SUSPENDED" && tenant.suspensionReason && (
+              <Card className="border-red-200">
+                <CardHeader>
+                  <CardTitle className="flex items-center text-red-600">
+                    <Pause className="h-5 w-5 mr-2" />
+                    Suspension
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    <div>
+                      <p className="text-sm font-medium text-gray-500">Date de suspension</p>
+                      <p className="text-lg">
+                        {tenant.suspensionDate ? formatDate(tenant.suspensionDate) : "Inconnue"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-500">Raison</p>
+                      <p className="text-sm bg-red-50 p-2 rounded">
+                        {tenant.suspensionReason}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
             
             {/* Basic Information */}
             <Card>
@@ -332,62 +417,278 @@ export default function TenantDetailPage() {
                     <p className="text-lg">{formatDate(tenant.createdAt)}</p>
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-gray-500">Modifié le</p>
-                    <p className="text-lg">{formatDate(tenant.modifiedAt)}</p>
+                    <p className="text-sm font-medium text-gray-500">Créé par</p>
+                    <p className="text-lg">{tenant.createdBy}</p>
                   </div>
-                  {tenant.industry && (
-                    <div>
-                      <p className="text-sm font-medium text-gray-500">Secteur</p>
-                      <p className="text-lg">{tenant.industry}</p>
+                  <div>
+                    <p className="text-sm font-medium text-gray-500">Région</p>
+                    <p className="text-lg">{tenant.region}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-500">Industrie</p>
+                    <p className="text-lg">{tenant.industry}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Subscription Information */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <CreditCard className="h-5 w-5 mr-2" />
+                  Abonnement
+                  {statusLoading && <RefreshCw className="h-4 w-4 ml-2 animate-spin" />}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {tenant.plan ? (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-sm font-medium text-gray-500">Plan actuel</p>
+                        <p className="text-lg font-semibold">{tenant.plan.name}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-500">Prix mensuel</p>
+                        <p className="text-lg">
+                          {tenant.currentPlanPrice ? 
+                            formatCurrency(tenant.currentPlanPrice, tenant.currency as Currency) : 
+                            "Non défini"
+                          }
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-500">Date de début</p>
+                        <p className="text-lg">
+                          {tenant.planStartDate ? formatDate(tenant.planStartDate) : "Non définie"}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-500">Date d'expiration</p>
+                        <p className="text-lg">
+                          {tenant.planExpiryDate ? formatDate(tenant.planExpiryDate) : "Non définie"}
+                        </p>
+                      </div>
                     </div>
-                  )}
-                  {tenant.region && (
-                    <div>
-                      <p className="text-sm font-medium text-gray-500">Région</p>
-                      <p className="text-lg">{tenant.region}</p>
+
+                    {daysUntilExpiry !== null && (
+                      <div className="mt-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium">Temps restant</span>
+                          <span className="text-sm text-gray-600">
+                            {daysUntilExpiry} jour(s)
+                          </span>
+                        </div>
+                        <Progress 
+                          value={Math.max(0, Math.min(100, (daysUntilExpiry / 30) * 100))} 
+                          className="h-2"
+                        />
+                      </div>
+                    )}
+
+                    {isInGracePeriod && (
+                      <Alert>
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertDescription>
+                          Ce tenant est actuellement en période de grâce.
+                        </AlertDescription>
+                      </Alert>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <CreditCard className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                    <p className="text-gray-600">Aucun plan attribué</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Usage Information - Show from tenant data instead of API */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <Activity className="h-5 w-5 mr-2" />
+                  Utilisation des Ressources
+                  {usageLoading && <RefreshCw className="h-4 w-4 ml-2 animate-spin" />}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-6">
+                  {/* Database Usage */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium flex items-center">
+                        <Database className="h-4 w-4 mr-2" />
+                        Stockage Base de Données
+                      </span>
+                      <span className="text-sm text-gray-600">
+                        {tenant.currentDatabaseUsageMB} MB
+                      </span>
                     </div>
+                    <div className="bg-gray-100 h-2 rounded">
+                      <div className="bg-blue-500 h-2 rounded" style={{width: '20%'}}></div>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">Usage actuel</p>
+                  </div>
+
+                  {/* S3 Usage */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium flex items-center">
+                        <HardDrive className="h-4 w-4 mr-2" />
+                        Stockage S3
+                      </span>
+                      <span className="text-sm text-gray-600">
+                        {tenant.currentS3UsageMB} MB
+                      </span>
+                    </div>
+                    <div className="bg-gray-100 h-2 rounded">
+                      <div className="bg-green-500 h-2 rounded" style={{width: '10%'}}></div>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">Usage actuel</p>
+                  </div>
+
+                  {/* Users Usage */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium flex items-center">
+                        <Users className="h-4 w-4 mr-2" />
+                        Utilisateurs
+                      </span>
+                      <span className="text-sm text-gray-600">
+                        {tenant.currentUsersCount}
+                      </span>
+                    </div>
+                    <div className="bg-gray-100 h-2 rounded">
+                      <div className="bg-purple-500 h-2 rounded" style={{width: '5%'}}></div>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">Utilisateurs actifs</p>
+                  </div>
+
+                  {/* Employees Usage */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium flex items-center">
+                        <User className="h-4 w-4 mr-2" />
+                        Employés
+                      </span>
+                      <span className="text-sm text-gray-600">
+                        {tenant.currentEmployeesCount}
+                      </span>
+                    </div>
+                    <div className="bg-gray-100 h-2 rounded">
+                      <div className="bg-orange-500 h-2 rounded" style={{width: '0%'}}></div>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">Employés enregistrés</p>
+                  </div>
+
+                  {/* Active Warnings */}
+                  {tenant.activeWarnings && tenant.activeWarnings.length > 0 && (
+                    <Alert variant="destructive">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>
+                        <strong>Alertes actives :</strong>
+                        <ul className="mt-1 list-disc list-inside">
+                          {tenant.activeWarnings.map((warning: string, index: number) => (
+                            <li key={index} className="text-sm">{warning}</li>
+                          ))}
+                        </ul>
+                      </AlertDescription>
+                    </Alert>
                   )}
+
+                  <div className="text-xs text-gray-500">
+                    Dernière mise à jour : {formatDate(tenant.resourcesLastUpdated)}
+                  </div>
                 </div>
               </CardContent>
             </Card>
 
             {/* Contact Information */}
-            {(tenant.billingEmail || tenant.phone || tenant.address) && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center">
-                    <Mail className="h-5 w-5 mr-2" />
-                    Informations de Contact
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {tenant.billingEmail && (
-                      <div className="flex items-center space-x-2">
-                        <Mail className="h-4 w-4 text-gray-500" />
-                        <span>{tenant.billingEmail}</span>
-                      </div>
-                    )}
-                    {tenant.phone && (
-                      <div className="flex items-center space-x-2">
-                        <Phone className="h-4 w-4 text-gray-500" />
-                        <span>{tenant.phone}</span>
-                      </div>
-                    )}
-                    {tenant.address && (
-                      <div className="flex items-center space-x-2 md:col-span-2">
-                        <MapPin className="h-4 w-4 text-gray-500" />
-                        <span>{tenant.address}</span>
-                        {tenant.city && <span>, {tenant.city}</span>}
-                        {tenant.country && <span>, {tenant.country}</span>}
-                      </div>
-                    )}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <Mail className="h-5 w-5 mr-2" />
+                  Informations de Contact
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm font-medium text-gray-500 flex items-center">
+                      <Mail className="h-4 w-4 mr-2" />
+                      Email de facturation
+                    </p>
+                    <p className="text-lg">{tenant.billingEmail || "Non défini"}</p>
                   </div>
-                </CardContent>
-              </Card>
-            )}
+                  <div>
+                    <p className="text-sm font-medium text-gray-500 flex items-center">
+                      <Phone className="h-4 w-4 mr-2" />
+                      Téléphone
+                    </p>
+                    <p className="text-lg">{tenant.phone || "Non défini"}</p>
+                  </div>
+                  <div className="md:col-span-2">
+                    <p className="text-sm font-medium text-gray-500 flex items-center">
+                      <MapPin className="h-4 w-4 mr-2" />
+                      Adresse
+                    </p>
+                    <p className="text-lg">
+                      {tenant.address && tenant.city && tenant.country
+                        ? `${tenant.address}, ${tenant.city}, ${tenant.country}`
+                        : "Non définie"
+                      }
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
 
-            {/* Admin Information */}
+            {/* Database Information */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <Database className="h-5 w-5 mr-2" />
+                  Base de Données
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-sm font-medium text-gray-500">URL de connexion</p>
+                    <p className="text-lg font-mono bg-gray-50 p-2 rounded text-sm break-all">
+                      {tenant.databaseUrl}
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm font-medium text-gray-500">Nom d'utilisateur</p>
+                      <p className="text-lg font-mono">{tenant.databaseCredentials.username}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-500">Mot de passe</p>
+                      <p className="text-lg font-mono">••••••••</p>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Sidebar */}
+          <div className="space-y-6">
+            {/* Actions Card */}
+            <TenantActionCard
+              tenant={tenant}
+              onSuspend={() => setShowSuspendModal(true)}
+              onReactivate={() => setShowReactivateModal(true)}
+              onAssignPlan={handleAssignPlan}
+              loading={actionLoading}
+            />
+
+            {/* Admin User Info */}
             {adminUser && (
               <Card>
                 <CardHeader>
@@ -397,7 +698,7 @@ export default function TenantDetailPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-3">
                     <div>
                       <p className="text-sm font-medium text-gray-500">Nom complet</p>
                       <p className="text-lg">{adminUser.firstName} {adminUser.lastName}</p>
@@ -407,8 +708,10 @@ export default function TenantDetailPage() {
                       <p className="text-lg">{adminUser.email}</p>
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-gray-500">Rôle</p>
-                      <p className="text-lg">{adminUser.companyRole || adminUser.role}</p>
+                      <p className="text-sm font-medium text-gray-500">Statut</p>
+                      <Badge variant={adminUser.status === "ACTIVE" ? "default" : "destructive"}>
+                        {adminUser.status}
+                      </Badge>
                     </div>
                     <div>
                       <p className="text-sm font-medium text-gray-500">Dernière connexion</p>
@@ -421,198 +724,6 @@ export default function TenantDetailPage() {
               </Card>
             )}
 
-            {/* Subscription Information */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <CreditCard className="h-5 w-5 mr-2" />
-                  Abonnement
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {tenant.plan ? (
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <p className="text-sm font-medium text-gray-500">Plan Actuel</p>
-                        <p className="text-lg font-semibold">{tenant.plan.name}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-500">Prix Mensuel</p>
-                        <p className="text-lg">{formatCurrency(tenant.currentPlanPrice, tenant.currency)}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-500">Date de Début</p>
-                        <p className="text-lg">{formatDate(tenant.planStartDate)}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-500">Date d'Expiration</p>
-                        <p className="text-lg">{formatDate(tenant.planExpiryDate)}</p>
-                      </div>
-                    </div>
-                    
-                    {tenant.planExpiryDate && tenant.planStartDate && (
-                      <div>
-                        <p className="text-sm font-medium text-gray-500 mb-2">Temps Restant</p>
-                        <div className="bg-gray-200 rounded-full h-2">
-                          <div 
-                            className="bg-blue-600 h-2 rounded-full" 
-                            style={{ 
-                              width: `${Math.max(0, 100 - ((Date.now() - tenant.planStartDate) / (tenant.planExpiryDate - tenant.planStartDate)) * 100)}%` 
-                            }}
-                          ></div>
-                        </div>
-                        <p className="text-sm text-gray-600 mt-1">
-                          {Math.ceil((tenant.planExpiryDate - Date.now()) / (1000 * 60 * 60 * 24))} jours restants
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="text-center py-6">
-                    <AlertCircle className="h-12 w-12 text-yellow-500 mx-auto mb-4" />
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">Aucun Plan Attribué</h3>
-                    <p className="text-gray-500 mb-4">Ce tenant n'a pas de plan d'abonnement actif.</p>
-                    <Button onClick={handleAssignPlan}>
-                      <CreditCard className="h-4 w-4 mr-2" />
-                      Attribuer un Plan
-                    </Button>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Usage Statistics */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Activity className="h-5 w-5 mr-2" />
-                  Utilisation des Ressources
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {/* Database Usage */}
-                  <div>
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="text-sm font-medium">Base de Données</span>
-                      <span className="text-sm text-gray-500">
-                        {formatBytes(tenant.currentDatabaseUsageMB * 1024 * 1024)} / {formatBytes(tenant.maxDatabaseStorageMB * 1024 * 1024)}
-                      </span>
-                    </div>
-                    <Progress 
-                      value={calculateUsagePercentage(tenant.currentDatabaseUsageMB, tenant.maxDatabaseStorageMB)} 
-                      className="h-2"
-                    />
-                  </div>
-
-                  {/* S3 Storage Usage */}
-                  <div>
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="text-sm font-medium">Stockage S3</span>
-                      <span className="text-sm text-gray-500">
-                        {formatBytes(tenant.currentS3UsageMB * 1024 * 1024)} / {formatBytes(tenant.maxS3StorageMB * 1024 * 1024)}
-                      </span>
-                    </div>
-                    <Progress 
-                      value={calculateUsagePercentage(tenant.currentS3UsageMB, tenant.maxS3StorageMB)} 
-                      className="h-2"
-                    />
-                  </div>
-
-                  {/* Users Count */}
-                  <div>
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="text-sm font-medium">Utilisateurs</span>
-                      <span className="text-sm text-gray-500">
-                        {tenant.currentUsersCount} / {tenant.maxUsers === -1 ? "Illimité" : tenant.maxUsers}
-                      </span>
-                    </div>
-                    <Progress 
-                      value={calculateUsagePercentage(tenant.currentUsersCount, tenant.maxUsers)} 
-                      className="h-2"
-                    />
-                  </div>
-
-                  {/* Employees Count */}
-                  <div>
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="text-sm font-medium">Employés</span>
-                      <span className="text-sm text-gray-500">
-                        {tenant.currentEmployeesCount} / {tenant.maxEmployees === -1 ? "Illimité" : tenant.maxEmployees}
-                      </span>
-                    </div>
-                    <Progress 
-                      value={calculateUsagePercentage(tenant.currentEmployeesCount, tenant.maxEmployees)} 
-                      className="h-2"
-                    />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Recent Invoices */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <FileText className="h-5 w-5 mr-2" />
-                  Factures Récentes
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {invoicesLoading ? (
-                  <div className="text-center py-4">
-                    <RefreshCw className="h-6 w-6 animate-spin text-blue-600 mx-auto mb-2" />
-                    <p className="text-gray-500">Chargement des factures...</p>
-                  </div>
-                ) : invoices && invoices.length > 0 ? (
-                  <div className="space-y-3">
-                    {invoices.slice(0, 3).map((invoice: any) => (
-                      <div key={invoice.invoiceId} className="flex items-center justify-between p-3 border rounded-lg">
-                        <div>
-                          <p className="font-medium">{invoice.invoiceNumber}</p>
-                          <p className="text-sm text-gray-500">{formatDate(invoice.issueDate)}</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-semibold">{formatCurrency(invoice.totalAmount, invoice.currency)}</p>
-                          <Badge 
-                            variant={invoice.status === 'PAID' ? 'default' : 'destructive'}
-                            className="text-xs"
-                          >
-                            {invoice.status}
-                          </Badge>
-                        </div>
-                      </div>
-                    ))}
-                    {invoices.length > 3 && (
-                      <div className="text-center">
-                        <Button variant="outline" size="sm">
-                          Voir toutes les factures ({invoices.length})
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="text-center py-6">
-                    <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-500">Aucune facture disponible</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Sidebar */}
-          <div className="space-y-6">
-            {/* Actions */}
-            <TenantActionCard
-              tenant={tenant}
-              onSuspend={handleSuspend}
-              onReactivate={handleReactivate}
-              onAssignPlan={handleAssignPlan}
-              loading={actionLoading}
-            />
-
             {/* Quick Stats */}
             <Card>
               <CardHeader>
@@ -621,130 +732,116 @@ export default function TenantDetailPage() {
                   Statistiques Rapides
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <Users className="h-4 w-4 text-blue-500" />
-                    <span className="text-sm">Utilisateurs</span>
-                  </div>
-                  <span className="font-semibold">{tenant.currentUsersCount}</span>
-                </div>
-                
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <Database className="h-4 w-4 text-green-500" />
-                    <span className="text-sm">Base de données</span>
-                  </div>
-                  <span className="font-semibold">{formatBytes(tenant.currentDatabaseUsageMB * 1024 * 1024)}</span>
-                </div>
-                
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <HardDrive className="h-4 w-4 text-purple-500" />
-                    <span className="text-sm">Stockage S3</span>
-                  </div>
-                  <span className="font-semibold">{formatBytes(tenant.currentS3UsageMB * 1024 * 1024)}</span>
-                </div>
-
-                <Separator />
-
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <DollarSign className="h-4 w-4 text-yellow-500" />
-                    <span className="text-sm">Total Payé</span>
-                  </div>
-                  <span className="font-semibold">
-                    {formatCurrency(tenant.totalAmountPaid || 0, tenant.currency)}
-                  </span>
-                </div>
-
-                {tenant.outstandingAmount && tenant.outstandingAmount > 0 && (
+              <CardContent>
+                <div className="space-y-4">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <AlertCircle className="h-4 w-4 text-red-500" />
-                      <span className="text-sm">Montant Dû</span>
-                    </div>
-                    <span className="font-semibold text-red-600">
-                      {formatCurrency(tenant.outstandingAmount, tenant.currency)}
-                    </span>
+                    <span className="text-sm text-gray-600">Utilisateurs</span>
+                    <span className="font-medium">{tenant.currentUsersCount || 0}</span>
                   </div>
-                )}
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-600">Employés</span>
+                    <span className="font-medium">{tenant.currentEmployeesCount || 0}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-600">Départements</span>
+                    <span className="font-medium">{tenant.currentDepartmentsCount || 0}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-600">Documents</span>
+                    <span className="font-medium">{tenant.currentDocumentsCount || 0}</span>
+                  </div>
+                  <Separator />
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-600">Stockage DB</span>
+                    <span className="font-medium">{formatBytes(tenant.currentDatabaseUsageMB * 1024 * 1024)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-600">Stockage S3</span>
+                    <span className="font-medium">{formatBytes(tenant.currentS3UsageMB * 1024 * 1024)}</span>
+                  </div>
+                </div>
               </CardContent>
             </Card>
 
-            {/* System Information */}
+            {/* Billing Summary */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center">
-                  <Shield className="h-5 w-5 mr-2" />
-                  Informations Système
+                  <DollarSign className="h-5 w-5 mr-2" />
+                  Facturation
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3">
-                <div>
-                  <p className="text-sm font-medium text-gray-500">URL Base de Données</p>
-                  <p className="text-xs text-gray-700 break-all">{tenant.databaseUrl}</p>
-                </div>
-                
-                {tenant.databaseCredentials && (
-                  <div>
-                    <p className="text-sm font-medium text-gray-500">Utilisateur DB</p>
-                    <p className="text-sm text-gray-700">{tenant.databaseCredentials.username}</p>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-600">Total payé</span>
+                    <span className="font-medium">
+                      {tenant.totalAmountPaid ? 
+                        formatCurrency(tenant.totalAmountPaid, tenant.currency as Currency) : 
+                        "0 €"
+                      }
+                    </span>
                   </div>
-                )}
-
-                <div>
-                  <p className="text-sm font-medium text-gray-500">Langue</p>
-                  <p className="text-sm text-gray-700">{tenant.language || 'fr'}</p>
-                </div>
-
-                <div>
-                  <p className="text-sm font-medium text-gray-500">Fuseau Horaire</p>
-                  <p className="text-sm text-gray-700">{tenant.timeZone || 'Europe/Paris'}</p>
-                </div>
-
-                <div>
-                  <p className="text-sm font-medium text-gray-500">Dernière Mise à Jour Ressources</p>
-                  <p className="text-sm text-gray-700">
-                    {formatDate(tenant.resourcesLastUpdated)}
-                  </p>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-600">Montant dû</span>
+                    <span className="font-medium">
+                      {tenant.outstandingAmount ? 
+                        formatCurrency(tenant.outstandingAmount, tenant.currency as Currency) : 
+                        "0 €"
+                      }
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-600">Dernier paiement</span>
+                    <span className="font-medium">
+                      {tenant.lastPaymentDate ? formatDate(tenant.lastPaymentDate) : "Aucun"}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-600">Prochaine facturation</span>
+                    <span className="font-medium">
+                      {tenant.nextBillingDate ? formatDate(tenant.nextBillingDate) : "Non programmée"}
+                    </span>
+  </div>
+                  <Separator />
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-600">Factures</span>
+                   <span className="font-medium">{invoices?.length || 0}</span>
+                  </div>
                 </div>
               </CardContent>
             </Card>
-
-            {/* Alerts & Warnings */}
-            {tenant.activeWarnings && tenant.activeWarnings.length > 0 && (
-              <Card className="border-yellow-200 bg-yellow-50">
-                <CardHeader>
-                  <CardTitle className="flex items-center text-yellow-800">
-                    <AlertCircle className="h-5 w-5 mr-2" />
-                    Alertes Actives
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    {tenant.activeWarnings.map((warning: string, index: number) => (
-                      <Alert key={index} className="border-yellow-200 bg-yellow-50">
-                        <AlertCircle className="h-4 w-4" />
-                        <AlertDescription className="text-yellow-800">
-                          {warning}
-                        </AlertDescription>
-                      </Alert>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
           </div>
         </div>
 
-        {/* Subscription Modal */}
+          
+
+        {/* Modals */}
         <SubscriptionModal
-          isOpen={isSubscriptionModalOpen}
-          onClose={() => setIsSubscriptionModalOpen(false)}
+          isOpen={showSubscriptionModal}
+          onClose={() => setShowSubscriptionModal(false)}
           tenantId={tenantId}
           tenantName={tenant.name}
           onSubscriptionAssigned={handleSubscriptionAssigned}
+        />
+
+        <SuspendTenantModal
+          isOpen={showSuspendModal}
+          onClose={() => setShowSuspendModal(false)}
+          tenantId={tenantId}
+          tenantName={tenant.name}
+          onSuspendConfirm={handleSuspendTenant}
+          loading={actionLoading}
+        />
+
+        <ReactivateTenantModal
+          isOpen={showReactivateModal}
+          onClose={() => setShowReactivateModal(false)}
+          tenantId={tenantId}
+          tenantName={tenant.name}
+          currentPlanId={tenant.plan?.id}
+          onReactivateConfirm={handleReactivateTenant}
+          loading={actionLoading}
         />
       </div>
     </ProtectedRoute>

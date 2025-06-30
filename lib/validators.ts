@@ -175,35 +175,64 @@ export const validatePaymentInfo = (
 // ===============================================================================
 // TENANT VALIDATION
 // ===============================================================================
-export const validateTenantData = (tenantData: any): ValidationResult => {
+// Ajout dans lib/validators.ts
+
+export const validateTenantData = (data: any) => {
   const errors: string[] = []
 
-  // Required tenant fields
-  if (!tenantData.tenantName?.trim()) {
-    errors.push("Nom du tenant requis")
-  } else if (tenantData.tenantName.length < 2) {
-    errors.push("Nom du tenant trop court (minimum 2 caractères)")
+  // Required fields validation
+  if (!data.tenantName?.trim()) errors.push("Le nom du tenant est requis")
+  if (!data.industry?.trim()) errors.push("L'industrie est requise")
+  if (!data.region?.trim()) errors.push("La région est requise")
+  if (!data.country?.trim()) errors.push("Le pays est requis")
+  if (!data.city?.trim()) errors.push("La ville est requise")
+  if (!data.address?.trim()) errors.push("L'adresse est requise")
+  if (!data.phone?.trim()) errors.push("Le téléphone est requis")
+  if (!data.billingEmail?.trim()) errors.push("L'email de facturation est requis")
+  if (!data.timeZone?.trim()) errors.push("Le fuseau horaire est requis")
+  if (!data.language?.trim()) errors.push("La langue est requise")
+
+  // Admin fields validation
+  if (!data.adminEmail?.trim()) errors.push("L'email administrateur est requis")
+  if (!data.adminFirstName?.trim()) errors.push("Le prénom administrateur est requis")
+  if (!data.adminLastName?.trim()) errors.push("Le nom administrateur est requis")
+  if (!data.adminPassword?.trim()) errors.push("Le mot de passe administrateur est requis")
+
+  // Email validation
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  if (data.billingEmail && !emailRegex.test(data.billingEmail)) {
+    errors.push("L'email de facturation n'est pas valide")
+  }
+  if (data.adminEmail && !emailRegex.test(data.adminEmail)) {
+    errors.push("L'email administrateur n'est pas valide")
   }
 
-  // Required admin fields
-  if (!tenantData.adminEmail?.trim()) {
-    errors.push("Email administrateur requis")
-  } else if (!isValidEmail(tenantData.adminEmail)) {
-    errors.push("Format d'email administrateur invalide")
+  // Phone validation (international format)
+  const phoneRegex = /^\+\d{1,4}\d{6,14}$/
+  if (data.phone && !phoneRegex.test(data.phone)) {
+    errors.push("Le format du téléphone n'est pas valide (ex: +212524789123)")
   }
 
-  if (!tenantData.adminFirstName?.trim()) {
-    errors.push("Prénom administrateur requis")
+  // Password validation
+  if (data.adminPassword && data.adminPassword.length < 8) {
+    errors.push("Le mot de passe doit contenir au moins 8 caractères")
   }
 
-  if (!tenantData.adminLastName?.trim()) {
-    errors.push("Nom administrateur requis")
+  // Postal code validation (optional but format check if provided)
+  if (data.postalCode && data.postalCode.length > 10) {
+    errors.push("Le code postal ne peut pas dépasser 10 caractères")
   }
 
-  if (!tenantData.adminPassword?.trim()) {
-    errors.push("Mot de passe administrateur requis")
-  } else if (tenantData.adminPassword.length < 8) {
-    errors.push("Mot de passe administrateur trop court (minimum 8 caractères)")
+  // Legal numbers validation (optional but format check if provided)
+  if (data.legalNumbers && typeof data.legalNumbers === 'object') {
+    Object.entries(data.legalNumbers).forEach(([key, value]) => {
+      if (typeof value !== 'string' || !value.trim()) {
+        errors.push(`La valeur pour ${key} ne peut pas être vide`)
+      }
+      if (key.length < 2) {
+        errors.push(`Le nom du numéro légal '${key}' est trop court`)
+      }
+    })
   }
 
   return {

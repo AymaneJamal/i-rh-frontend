@@ -1,145 +1,195 @@
 // lib/api-client.ts
-import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse, AxiosError } from 'axios'
-import { API_HEADERS } from '@/lib/constants'
+import axios, { AxiosInstance, AxiosResponse, AxiosError, AxiosRequestConfig, InternalAxiosRequestConfig } from "axios"
 
 // ===============================================================================
-// API CLIENT CONFIGURATION
+// TYPES & INTERFACES
 // ===============================================================================
 
-interface ApiClientConfig extends AxiosRequestConfig {
-  userEmail?: string
-  autoRetry?: boolean
-  maxRetries?: number
+export interface ApiClientConfig extends AxiosRequestConfig {
+  skipAuth?: boolean
+  includeUserEmail?: boolean // Nouveau flag pour inclure l'email automatiquement
+  customHeaders?: Record<string, string>
 }
+
+// Extension de l'interface Axios pour nos propriétés personnalisées
+interface ExtendedAxiosRequestConfig extends InternalAxiosRequestConfig {
+  skipAuth?: boolean
+  includeUserEmail?: boolean
+  customHeaders?: Record<string, string>
+}
+
+interface ApiErrorResponse {
+  error?: string
+  message?: string
+  details?: any
+}
+
+// ===============================================================================
+// API HEADERS CONSTANTS
+// ===============================================================================
+
+const API_HEADERS = {
+  CONTENT_TYPE_JSON: "application/json",
+  CONTENT_TYPE_FORM: "application/x-www-form-urlencoded",
+  ACCEPT_JSON: "application/json", // Renommé pour éviter la duplication
+  USER_EMAIL: "X-User-Email", // Header pour l'email utilisateur
+  CSRF_TOKEN: "X-CSRF-Token"
+} as const
+
+// ===============================================================================
+// API CLIENT CLASS
+// ===============================================================================
 
 class ApiClient {
   private client: AxiosInstance
-  private currentUserEmail: string | null = null
+  private baseURL: string
+  private retryConfig: {
+    maxRetries: number
+    retryDelay: number
+    retryCondition: (error: AxiosError) => boolean
+  }
 
   constructor() {
+    this.baseURL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4010"
+    
+    this.retryConfig = {
+      maxRetries: 3,
+      retryDelay: 1000,
+      retryCondition: (error: AxiosError) => {
+        return (
+          !error.response ||
+          error.response.status >= 500 ||
+          error.response.status === 429
+        )
+      }
+    }
+
     this.client = axios.create({
-      baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:4010",
-      timeout: 30000, // 30 seconds
+      baseURL: this.baseURL,
+      timeout: 30000,
       withCredentials: true,
+      headers: {
+        'Content-Type': API_HEADERS.CONTENT_TYPE_JSON,
+        'Accept': API_HEADERS.ACCEPT_JSON,
+      },
     })
 
-    // Setup interceptors
-    this.setupRequestInterceptor()
-    this.setupResponseInterceptor()
+    this.setupInterceptors()
   }
 
   // ===============================================================================
-  // USER EMAIL MANAGEMENT
+  // INTERCEPTORS SETUP
   // ===============================================================================
 
-  setUserEmail(email: string) {
-    this.currentUserEmail = email
-    console.log("🔧 API Client: User email set to", email)
-  }
-
-  getUserEmail(): string | null {
-    return this.currentUserEmail
-  }
-
-  private getUserEmailFromStorage(): string | null {
-    if (typeof window === 'undefined') return null
-    
-    // Try to get from Redux store first, then localStorage
-    try {
-      const authState = localStorage.getItem('auth')
-      if (authState) {
-        const parsed = JSON.parse(authState)
-        return parsed?.user?.email || null
-      }
-    } catch (error) {
-      console.warn("Could not parse auth state from localStorage")
-    }
-    
-    return localStorage.getItem('userEmail')
-  }
-
-  // ===============================================================================
-  // REQUEST INTERCEPTOR
-  // ===============================================================================
-
-  private setupRequestInterceptor() {
+  private setupInterceptors() {
+    // Request Interceptor
     this.client.interceptors.request.use(
-      (config) => {
-        // Get CSRF token
+      (config: ExtendedAxiosRequestConfig) => {
+        console.log("🔍 Request config:", {
+        url: config.url,
+        method: config.method,
+        headers: config.headers,
+        includeUserEmail: config.includeUserEmail
+      })
+        // Always add CSRF token if available
         const csrfToken = localStorage.getItem("csrfToken")
-        if (csrfToken) {
-          config.headers["X-CSRF-Token"] = csrfToken
+        if (csrfToken && !config.skipAuth) {
+          if (config.headers) {
+            config.headers[API_HEADERS.CSRF_TOKEN] = csrfToken
+          }
         }
 
-        // Auto-add user email header if not provided
-        const userEmail = config.headers[API_HEADERS.USER_EMAIL] || 
-                         this.currentUserEmail || 
-                         this.getUserEmailFromStorage()
-
-        if (userEmail) {
-          config.headers[API_HEADERS.USER_EMAIL] = userEmail
+        // Add user email header if requested
+        if (config.includeUserEmail) {
+          const userEmail = this.getCurrentUserEmail()
+          if (userEmail && config.headers) {
+            config.headers[API_HEADERS.USER_EMAIL] = userEmail
+          }
         }
 
-        // Handle FormData content type
-        if (config.data instanceof FormData) {
-          // Let browser set Content-Type automatically for FormData
-          delete config.headers['Content-Type']
-        } else if (!config.headers['Content-Type']) {
-          config.headers['Content-Type'] = API_HEADERS.CONTENT_TYPE_JSON
+        // Add custom headers if provided
+        if (config.customHeaders && config.headers) {
+          Object.entries(config.customHeaders).forEach(([key, value]) => {
+            if (config.headers) {
+              config.headers[key] = value
+            }
+          })
         }
-
-        console.log(`📤 ${config.method?.toUpperCase()} ${config.url}`, {
-          headers: config.headers,
-          hasData: !!config.data,
-          isFormData: config.data instanceof FormData
-        })
 
         return config
       },
-      (error) => {
-        console.error("❌ Request interceptor error:", error)
-        return Promise.reject(error)
-      }
+      (error) => Promise.reject(error)
     )
-  }
 
-  // ===============================================================================
-  // RESPONSE INTERCEPTOR
-  // ===============================================================================
-
-  private setupResponseInterceptor() {
+    // Response Interceptor  
     this.client.interceptors.response.use(
-      (response: AxiosResponse) => {
-        // Update CSRF token if provided
-        const newCsrfToken = response.data?.newCsrfToken || response.data?.csrfToken
-        if (newCsrfToken) {
-          localStorage.setItem("csrfToken", newCsrfToken)
-        }
-
-        console.log(`📥 ${response.status} ${response.config.method?.toUpperCase()} ${response.config.url}`)
-        return response
-      },
-      (error: AxiosError) => {
-        console.error(`❌ ${error.response?.status} ${error.config?.method?.toUpperCase()} ${error.config?.url}`, {
-          status: error.response?.status,
-          statusText: error.response?.statusText,
-          data: error.response?.data
-        })
-
-        // Handle specific error cases
+      (response) => response,
+      async (error) => {
         if (error.response?.status === 401) {
-          console.warn("🔒 Unauthorized - clearing auth state")
-          localStorage.removeItem("csrfToken")
-          // Could dispatch logout action here if needed
+          // Handle authentication errors
+          this.handleAuthError()
         }
-
         return Promise.reject(error)
       }
     )
   }
 
   // ===============================================================================
-  // HTTP METHODS WITH ENHANCED FEATURES
+  // USER EMAIL HELPER
+  // ===============================================================================
+
+  private getCurrentUserEmail(): string | null {
+    try {
+      // Méthode 1: Accès direct au store (recommandée)
+      if (typeof window !== 'undefined' && (window as any).__REDUX_STORE__) {
+        const state = (window as any).__REDUX_STORE__.getState()
+        return state?.auth?.user?.email || null
+      }
+      
+      // Méthode 2: Fallback via localStorage si disponible
+      const userDataStr = localStorage.getItem('currentUser')
+      if (userDataStr) {
+        const userData = JSON.parse(userDataStr)
+        return userData?.email || null
+      }
+      
+      return null
+    } catch (error) {
+      console.warn('Failed to get current user email:', error)
+      return null
+    }
+  }
+
+  // ===============================================================================
+  // AUTH ERROR HANDLER
+  // ===============================================================================
+
+  private handleAuthError() {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem("csrfToken")
+      window.location.href = "/login"
+    }
+  }
+
+  // ===============================================================================
+  // UTILITY METHODS
+  // ===============================================================================
+
+  buildQueryString(params: Record<string, any>): string {
+    const searchParams = new URLSearchParams()
+    
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== null && value !== undefined && value !== '') {
+        searchParams.append(key, String(value))
+      }
+    })
+
+    const queryString = searchParams.toString()
+    return queryString ? `?${queryString}` : ''
+  }
+
+  // ===============================================================================
+  // CORE HTTP METHODS
   // ===============================================================================
 
   async get<T = any>(url: string, config?: ApiClientConfig): Promise<AxiosResponse<T>> {
@@ -166,21 +216,19 @@ class ApiClient {
   // FORM DATA HELPERS
   // ===============================================================================
 
-  async postFormData<T = any>(
-    url: string, 
-    formData: FormData, 
-    config?: ApiClientConfig
-  ): Promise<AxiosResponse<T>> {
-    const formConfig: ApiClientConfig = {
-      ...config,
-      headers: {
-        ...config?.headers,
-        // Content-Type will be set automatically by browser for FormData
-      }
-    }
-
-    return this.post<T>(url, formData, formConfig)
+async postFormData<T = any>(
+  url: string, 
+  formData: FormData, 
+  config?: ApiClientConfig
+): Promise<AxiosResponse<T>> {
+  // Ne PAS définir Content-Type pour FormData - le navigateur le fait automatiquement
+  const formConfig: ApiClientConfig = {
+    ...config,
+    // Supprimer complètement la section headers pour FormData
   }
+
+  return this.post<T>(url, formData, formConfig)
+}
 
   async putFormData<T = any>(
     url: string, 
@@ -191,7 +239,8 @@ class ApiClient {
       ...config,
       headers: {
         ...config?.headers,
-        // Content-Type will be set automatically by browser for FormData
+        // Note: Content-Type will be set automatically by browser for FormData
+        // Do not set it manually as it will break the boundary parameter
       }
     }
 
@@ -251,6 +300,54 @@ class ApiClient {
   }
 
   // ===============================================================================
+  // METHODS WITH AUTO USER EMAIL
+  // ===============================================================================
+
+  async postWithUserEmail<T = any>(
+    url: string, 
+    data?: any, 
+    config?: ApiClientConfig
+  ): Promise<AxiosResponse<T>> {
+    return this.post<T>(url, data, { ...config, includeUserEmail: true })
+  }
+
+  async putWithUserEmail<T = any>(
+    url: string, 
+    data?: any, 
+    config?: ApiClientConfig
+  ): Promise<AxiosResponse<T>> {
+    return this.put<T>(url, data, { ...config, includeUserEmail: true })
+  }
+
+  async deleteWithUserEmail<T = any>(
+    url: string, 
+    config?: ApiClientConfig
+  ): Promise<AxiosResponse<T>> {
+    return this.delete<T>(url, { ...config, includeUserEmail: true })
+  }
+
+  // ===============================================================================
+  // MANUAL USER EMAIL METHODS
+  // ===============================================================================
+
+  async postWithCustomUserEmail<T = any>(
+    url: string, 
+    userEmail: string,
+    data?: any, 
+    config?: ApiClientConfig
+  ): Promise<AxiosResponse<T>> {
+    const customHeadersConfig: ApiClientConfig = {
+      ...config,
+      customHeaders: { 
+        ...config?.customHeaders, 
+        [API_HEADERS.USER_EMAIL]: userEmail 
+      }
+    }
+    
+    return this.post<T>(url, data, customHeadersConfig)
+  }
+
+  // ===============================================================================
   // RETRY LOGIC
   // ===============================================================================
 
@@ -258,83 +355,27 @@ class ApiClient {
     operation: () => Promise<AxiosResponse<T>>,
     config?: ApiClientConfig
   ): Promise<AxiosResponse<T>> {
-    if (!config?.autoRetry) {
-      return operation()
-    }
-
-    const maxRetries = config.maxRetries || 3
-    let lastError: any
-
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    let lastError: AxiosError
+    
+    for (let attempt = 0; attempt <= this.retryConfig.maxRetries; attempt++) {
       try {
         return await operation()
       } catch (error) {
-        lastError = error
+        lastError = error as AxiosError
         
-        // Don't retry on client errors (4xx) except 429 (rate limit)
-        if (error instanceof AxiosError) {
-          const status = error.response?.status
-          if (status && status >= 400 && status < 500 && status !== 429) {
-            throw error
-          }
+        if (attempt === this.retryConfig.maxRetries || !this.retryConfig.retryCondition(lastError)) {
+          break
         }
-
-        if (attempt < maxRetries) {
-          const delay = Math.pow(2, attempt) * 1000 // Exponential backoff
-          console.log(`⏳ Retrying request in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`)
-          await new Promise(resolve => setTimeout(resolve, delay))
-        }
+        
+        await this.delay(this.retryConfig.retryDelay * Math.pow(2, attempt))
       }
     }
-
-    throw lastError
-  }
-
-  // ===============================================================================
-  // UTILITY METHODS
-  // ===============================================================================
-
-  createFormData(data: Record<string, any>): FormData {
-    const formData = new FormData()
     
-    Object.entries(data).forEach(([key, value]) => {
-      if (value !== null && value !== undefined) {
-        if (value instanceof File) {
-          formData.append(key, value)
-        } else {
-          formData.append(key, String(value))
-        }
-      }
-    })
-
-    return formData
+    throw lastError!
   }
 
-  buildQueryString(params: Record<string, any>): string {
-    const searchParams = new URLSearchParams()
-    
-    Object.entries(params).forEach(([key, value]) => {
-      if (value !== null && value !== undefined && value !== '') {
-        searchParams.append(key, String(value))
-      }
-    })
-
-    const queryString = searchParams.toString()
-    return queryString ? `?${queryString}` : ''
-  }
-
-  // ===============================================================================
-  // HEALTH CHECK
-  // ===============================================================================
-
-  async healthCheck(): Promise<boolean> {
-    try {
-      await this.get('/health')
-      return true
-    } catch (error) {
-      console.error("❌ Health check failed:", error)
-      return false
-    }
+  private delay(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms))
   }
 }
 
