@@ -25,6 +25,7 @@ import {
   Table,
   Shield,
   UserCog,
+  CreditCard,
 } from "lucide-react"
 
 const baseMenuItems = [{}]
@@ -134,6 +135,9 @@ export function Sidebar() {
     // All authenticated users get user and tenant management
     sections.push(userManagementSection, tenantManagementSection)
 
+    // All authenticated users get plan management
+    sections.push(planManagementSection)
+
     // ADMIN_PRINCIPAL gets additional sections
     if (user?.role === "ADMIN_PRINCIPAL") {
       sections.push(...adminPrincipalSections)
@@ -199,3 +203,27 @@ export function Sidebar() {
     </div>
   )
 }
+
+const planManagementSection = {
+  title: "Plan Management",
+  icon: CreditCard,
+  children: [
+    {
+      title: "All Plans",
+      href: "/dashboard/plans",
+    },
+    {
+      title: "Add Plan",
+      href: "/dashboard/plans/add",
+    },
+    {
+      title: "Plan Categories",
+      href: "/dashboard/plans/categories",
+    },
+    {
+      title: "Plan Analytics",
+      href: "/dashboard/plans/analytics",
+    },
+  ],
+}
+

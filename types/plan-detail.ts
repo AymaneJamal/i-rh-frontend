@@ -1,0 +1,74 @@
+// types/plan-detail.ts
+
+export interface PlanDetail {
+  planId: string
+  planName: string
+  description: string
+  category: string
+  monthlyPrice: number
+  yearlyPrice: number
+  currency: string
+  billingCycle: string | null
+  trialPeriodDays: number | null
+  maxDatabaseStorageMB: number
+  maxS3StorageMB: number
+  maxUsers: number
+  maxEmployees: number
+  maxDepartments: number
+  maxProjects: number | null
+  maxDocuments: number | null
+  maxReports: number
+  hrFeatures: {
+    payroll: boolean
+    recruitment: boolean
+    performance_management: boolean
+    employee_onboarding: boolean
+    time_tracking: boolean
+    leave_management: boolean
+    training_management: boolean
+    document_management: boolean
+    reporting_analytics: boolean
+    employee_self_service: boolean
+  }
+  hrLimits: {
+    max_payslips_per_month: number
+    max_job_postings: number
+    max_candidates_per_month: number
+    max_performance_reviews: number
+    max_training_sessions: number
+    max_document_uploads_per_month: number
+    max_custom_reports: number
+    max_api_calls_per_day: number
+  }
+  hasAdvancedReporting: boolean | null
+  hasApiAccess: boolean | null
+  hasCustomBranding: boolean | null
+  hasMultiLanguage: boolean | null
+  hasSsoIntegration: boolean | null
+  hasBackupRestore: boolean | null
+  hasPrioritySupport: boolean | null
+  status: string
+  version: string
+  isPublic: number
+  isRecommended: number
+  createdAt: number
+  modifiedAt: number | null
+  createdBy: string
+  modifiedBy: string | null
+  autoRenewalDays: number | null
+  gracePeriodDays: number
+  includedModules: string[]
+  customAttributes: Record<string, string>
+  termsAndConditions: string
+  upgradeableTo: string | null
+  downgradeableTo: string | null
+  requiresDataMigration: boolean | null
+}
+
+export interface PlanDetailResponse {
+  timestamp: number
+  message: string
+  success: boolean
+  data: PlanDetail
+  requestId: string
+}
