@@ -1,37 +1,31 @@
 // lib/api/tenant-subscription.ts
 import { apiClient } from "@/lib/api-client"
 import { PaymentMethod } from "@/lib/constants"
+import { AssignPlanRequest } from "@/types/assign-plan"
 
 export const tenantSubscriptionApi = {
+  
   assignPlan: async (
-  tenantId: string,
-  planId: string,
-  paymentMethod: PaymentMethod,
-  paymentReference: string,
-  receiptFile: File,
-  startDate?: number,
-  endDate?: number
+  request: AssignPlanRequest,
+  receiptFile?: File
 ) => {
   console.log("🔍 API assignPlan called with:", {
-    tenantId,
-    planId,
-    paymentMethod,
-    paymentReference,
+    tenantId: request.tenantId,
+    planId: request.planId,
+    invoiceType: request.invoiceType,
+    billingMethod: request.billingMethod,
     fileName: receiptFile?.name,
     fileSize: receiptFile?.size
   })
 
   const formData = new FormData()
-  formData.append('planId', planId)
-  formData.append('paymentMethod', paymentMethod)
-  formData.append('paymentReference', paymentReference)
-  formData.append('receipt', receiptFile)
   
-  if (startDate) {
-    formData.append('startDate', startDate.toString())
-  }
-  if (endDate) {
-    formData.append('endDate', endDate.toString())
+  // Ajouter le JSON request en tant que string
+  formData.append('request', JSON.stringify(request))
+  
+  // Ajouter le fichier si présent
+  if (receiptFile) {
+    formData.append('receipt', receiptFile)
   }
 
   // Debug FormData
@@ -41,7 +35,7 @@ export const tenantSubscriptionApi = {
   }
 
   const response = await apiClient.post(
-    `/api/subscriptions/tenants/${tenantId}/assign-plan`,
+    `/api/subscriptions/tenants/${request.tenantId}/assign-plan`,
     formData,
     { 
       includeUserEmail: true,
@@ -53,6 +47,7 @@ export const tenantSubscriptionApi = {
   
   return response.data
 },
+    
 
   changePlan: async (
     tenantId: string,

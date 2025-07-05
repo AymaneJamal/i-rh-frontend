@@ -1,5 +1,6 @@
 "use client"
 
+import { AssignPlanModal } from "@/components/modals/assign-plan-modal"
 import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { ProtectedRoute } from "@/components/auth/protected-route"
@@ -19,6 +20,10 @@ import { tenantSubscriptionApi } from "@/lib/api/tenant-subscription"
 import { formatCurrency, formatDate, formatDuration } from "@/lib/formatters"
 import { formatBytes } from "@/lib/utils"
 import { Currency } from "@/lib/constants"
+// Ajouter ces imports :
+import { StatusHistorySection } from "@/components/tenant/status-history-section"
+import { InvoicesSection } from "@/components/tenant/invoices-section"
+import { useTenantHistory } from "@/hooks/use-tenant-history"
 import {
   ArrowLeft,
   Building2,
@@ -137,7 +142,18 @@ export default function TenantDetailPage() {
   } = useTenantDetail(tenantId, false) // POLLING DISABLED
 
   const { assignPlan } = useTenantSubscription()
-  const { invoices, loading: invoicesLoading, refresh: refreshInvoices } = useTenantInvoices(tenantId)
+
+    const {
+      statusHistory,
+      statusLoading: historyStatusLoading,
+      statusError: historyStatusError,
+      refreshStatusHistory,
+      invoices,
+      invoicesLoading: historyInvoicesLoading,
+      invoicesError: historyInvoicesError,
+      refreshInvoices,
+      refreshAll: refreshHistory
+    } = useTenantHistory(tenantId)
 
   // ===============================================================================
   // STATUS HELPERS
@@ -179,6 +195,9 @@ export default function TenantDetailPage() {
     
     return <Badge variant="default">Actif</Badge>
   }
+
+
+
 
   // ===============================================================================
   // ACTION HANDLERS
@@ -235,6 +254,8 @@ export default function TenantDetailPage() {
   const handleRefreshUsageData = async () => {
     refreshSubscriptionData()
   }
+
+
 
   // ===============================================================================
   // RENDER LOADING STATE
@@ -817,12 +838,12 @@ export default function TenantDetailPage() {
           
 
         {/* Modals */}
-        <SubscriptionModal
+        <AssignPlanModal
           isOpen={showSubscriptionModal}
           onClose={() => setShowSubscriptionModal(false)}
-          tenantId={tenantId}
-          tenantName={tenant.name}
-          onSubscriptionAssigned={handleSubscriptionAssigned}
+          tenantId={params.tenantId as string}
+          tenantName={tenant?.name || ""}
+          onPlanAssigned={refresh}
         />
 
         <SuspendTenantModal
@@ -843,6 +864,22 @@ export default function TenantDetailPage() {
           onReactivateConfirm={handleReactivateTenant}
           loading={actionLoading}
         />
+
+    {/* Status History Section */}
+    <StatusHistorySection 
+      statusHistory={statusHistory}
+      loading={historyStatusLoading}
+      error={historyStatusError}
+      onRefresh={refreshStatusHistory}
+    />
+
+    {/* Invoices Section */}
+    <InvoicesSection 
+      invoices={invoices}
+      loading={historyInvoicesLoading}
+      error={historyInvoicesError}
+      onRefresh={refreshInvoices}
+    />
       </div>
     </ProtectedRoute>
   )
