@@ -12,8 +12,10 @@ export const useTenantDetail = (tenantId: string, enablePolling: boolean = false
   const [error, setError] = useState<string | null>(null)
   const [refreshTrigger, setRefreshTrigger] = useState(0)
 
-  // Subscription-related state
+  // NOUVEAUX CHAMPS BACKEND
   const [subscriptionStatus, setSubscriptionStatus] = useState<string | null>(null)
+  const [isActive, setIsActive] = useState<boolean>(false)
+  
   const [usageData, setUsageData] = useState<TenantUsageResponse['data'] | null>(null)
   const [statusLoading, setStatusLoading] = useState(false)
   const [usageLoading, setUsageLoading] = useState(false)
@@ -25,19 +27,16 @@ export const useTenantDetail = (tenantId: string, enablePolling: boolean = false
   const mountedRef = useRef(true)
 
   // ===============================================================================
-  // COMPUTED VALUES
+  // COMPUTED VALUES - SIMPLIFIÉS
   // ===============================================================================
   
   const isAvailable = tenant ? Date.now() > (tenant.createdAt + 10 * 60 * 1000) : true
   const remainingTime = tenant ? Math.max(0, (tenant.createdAt + 10 * 60 * 1000) - Date.now()) : 0
   
-  // Subscription status
+  // Utiliser directement subscriptionStatus du backend
   const hasSubscription = Boolean(tenant?.plan?.id)
   const hasUsageAlerts = usageData?.hasAlerts === 1 && usageData?.activeWarnings?.length > 0
-  const isInGracePeriod = tenant?.isInGracePeriod === 1
-  const isSuspended = tenant?.status === "SUSPENDED"
-  const isExpired = tenant?.planExpiryDate ? Date.now() > tenant.planExpiryDate : false
-
+  
   // Usage percentages
   const usagePercentages = usageData ? {
     database: usageData.usagePercentages.databasePercent,
@@ -46,12 +45,8 @@ export const useTenantDetail = (tenantId: string, enablePolling: boolean = false
     employees: usageData.usagePercentages.employeesPercent
   } : null
 
-  // Days until expiry
-  const daysUntilExpiry = tenant?.planExpiryDate ? 
-    Math.floor((tenant.planExpiryDate - Date.now()) / (24 * 60 * 60 * 1000)) : null
-
   // ===============================================================================
-  // FETCH TENANT DETAILS
+  // FETCH TENANT DETAILS - ADAPTÉ POUR NOUVEAUX CHAMPS
   // ===============================================================================
   const fetchTenantDetail = useCallback(async () => {
     if (!tenantId) {
@@ -71,6 +66,9 @@ export const useTenantDetail = (tenantId: string, enablePolling: boolean = false
         console.log("✅ Tenant details loaded:", response.data)
         setTenant(response.data.tenant)
         setAdminUser(response.data.adminUser)
+        // EXTRAIRE LES NOUVEAUX CHAMPS
+        setSubscriptionStatus(response.data.subscriptionStatus)
+        setIsActive(response.data.isActive)
       } else {
         setError("Failed to fetch tenant details")
       }
@@ -83,7 +81,7 @@ export const useTenantDetail = (tenantId: string, enablePolling: boolean = false
   }, [tenantId, refreshTrigger])
 
   // ===============================================================================
-  // FETCH SUBSCRIPTION STATUS (with error handling)
+  // FETCH SUBSCRIPTION STATUS - SIMPLIFIÉ
   // ===============================================================================
   const fetchSubscriptionStatus = useCallback(async () => {
     if (!tenantId || !mountedRef.current) return
@@ -100,7 +98,6 @@ export const useTenantDetail = (tenantId: string, enablePolling: boolean = false
       }
     } catch (err: any) {
       console.error("❌ Failed to fetch subscription status:", err)
-      // Don't set main error state for status failures - just log
       if (mountedRef.current) {
         setSubscriptionStatus(null)
       }
@@ -112,14 +109,14 @@ export const useTenantDetail = (tenantId: string, enablePolling: boolean = false
   }, [tenantId])
 
   // ===============================================================================
-  // FETCH USAGE DATA (with error handling)
+  // FETCH USAGE DATA
   // ===============================================================================
   const fetchUsageData = useCallback(async () => {
     if (!tenantId || !mountedRef.current) return
 
     try {
       setUsageLoading(true)
-      console.log("📊 Fetching tenant usage data:", tenantId)
+      console.log("🔍 Fetching tenant usage data:", tenantId)
       
       const response = await tenantSubscriptionApi.getTenantUsage(tenantId)
       
@@ -129,7 +126,6 @@ export const useTenantDetail = (tenantId: string, enablePolling: boolean = false
       }
     } catch (err: any) {
       console.error("❌ Failed to fetch usage data:", err)
-      // Don't set main error state for usage failures - just log
       if (mountedRef.current) {
         setUsageData(null)
       }
@@ -141,32 +137,24 @@ export const useTenantDetail = (tenantId: string, enablePolling: boolean = false
   }, [tenantId])
 
   // ===============================================================================
-  // POLLING MANAGEMENT
+  // POLLING FUNCTIONS
   // ===============================================================================
   const startPolling = useCallback(() => {
-    if (isPollingActive || !enablePolling || !tenantId) return
-
-    console.log("🔄 Starting polling for tenant:", tenantId)
+    if (isPollingActive) return
+    
+    console.log("▶️ Starting polling")
     setIsPollingActive(true)
-
-    // Status polling every 10 minutes
+    
+    // Poll status every 5 minutes
     statusIntervalRef.current = setInterval(() => {
-      if (mountedRef.current) {
-        fetchSubscriptionStatus()
-      }
-    }, 10 * 60 * 1000) // 10 minutes
-
-    // Usage polling every 15 minutes  
+      fetchSubscriptionStatus()
+    }, 5 * 60 * 1000)
+    
+    // Poll usage every 10 minutes
     usageIntervalRef.current = setInterval(() => {
-      if (mountedRef.current) {
-        fetchUsageData()
-      }
-    }, 15 * 60 * 1000) // 15 minutes
-
-    // Initial fetch
-    fetchSubscriptionStatus()
-    fetchUsageData()
-  }, [enablePolling, tenantId, isPollingActive, fetchSubscriptionStatus, fetchUsageData])
+      fetchUsageData()
+    }, 10 * 60 * 1000)
+  }, [isPollingActive, fetchSubscriptionStatus, fetchUsageData])
 
   const stopPolling = useCallback(() => {
     console.log("⏹️ Stopping polling")
@@ -193,7 +181,7 @@ export const useTenantDetail = (tenantId: string, enablePolling: boolean = false
   const refreshSubscriptionData = useCallback(() => {
     if (tenantId) {
       fetchSubscriptionStatus()
-      // fetchUsageData()
+      fetchUsageData()
     }
   }, [tenantId, fetchSubscriptionStatus, fetchUsageData])
 
@@ -247,8 +235,11 @@ export const useTenantDetail = (tenantId: string, enablePolling: boolean = false
     isAvailable,
     remainingTime,
 
-    // Subscription data
+    // NOUVEAUX CHAMPS BACKEND
     subscriptionStatus,
+    isActive,
+    
+    // Subscription data
     usageData,
     statusLoading,
     usageLoading,
@@ -256,11 +247,7 @@ export const useTenantDetail = (tenantId: string, enablePolling: boolean = false
     // Computed values
     hasSubscription,
     hasUsageAlerts,
-    isInGracePeriod,
-    isSuspended,
-    isExpired,
     usagePercentages,
-    daysUntilExpiry,
 
     // Actions
     refresh,

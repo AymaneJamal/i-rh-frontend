@@ -25,6 +25,7 @@ import {
 import { useTenants } from "@/hooks/use-tenants"
 import { tenantApi } from "@/lib/api/tenant"
 import { Tenant } from "@/types/tenant"
+import { SubscriptionStatus } from "@/lib/constants"
 import { 
   Building2, 
   Plus, 
@@ -55,8 +56,20 @@ const getStatusBadgeVariant = (status: string) => {
   }
 }
 
-const getSubscriptionBadgeVariant = (expired: boolean) => {
-  return expired ? "destructive" : "default"
+// FONCTION MISE À JOUR POUR NOUVEAUX STATUTS
+const getSubscriptionBadgeVariant = (subscriptionStatus: SubscriptionStatus) => {
+  switch (subscriptionStatus) {
+    case "PENDING":
+      return "outline" // Orange
+    case "ACTIVE":
+      return "default" // Green
+    case "EXPIRED":
+      return "destructive" // Red
+    case "GRACE":
+      return "secondary" // Yellow
+    default:
+      return "outline"
+  }
 }
 
 const formatDate = (timestamp: number) => {
@@ -71,7 +84,7 @@ const formatDate = (timestamp: number) => {
 
 const TenantTableRow = ({ tenant }: { tenant: Tenant }) => {
   const router = useRouter()
-  const isDetailsAvailable = tenantApi.isTenantDetailsAvailable(tenant.createdAt)
+  const isDetailsAvailable = Date.now() > (tenant.createdAt + 10 * 60 * 1000)
 
   const handleViewTenant = () => {
     router.push(`/dashboard/tenants/${tenant.tenantId}`)
@@ -88,7 +101,7 @@ const TenantTableRow = ({ tenant }: { tenant: Tenant }) => {
           <Badge variant={getStatusBadgeVariant(tenant.status)}>
             {tenant.status}
           </Badge>
-          {tenant.active && (
+          {tenant.isActive && (
             <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
               Active
             </Badge>
@@ -116,8 +129,9 @@ const TenantTableRow = ({ tenant }: { tenant: Tenant }) => {
         </div>
       </TableCell>
       <TableCell>
-        <Badge variant={getSubscriptionBadgeVariant(tenant.subscriptionExpired)}>
-          {tenant.subscriptionExpired ? "Expiré" : "Actif"}
+        {/* UTILISER LE NOUVEAU subscriptionStatus */}
+        <Badge variant={getSubscriptionBadgeVariant(tenant.subscriptionStatus)}>
+          {tenant.subscriptionStatus}
         </Badge>
       </TableCell>
       <TableCell className="text-gray-600">
@@ -135,7 +149,14 @@ const TenantTableRow = ({ tenant }: { tenant: Tenant }) => {
           >
             <Eye className="h-4 w-4" />
           </Button>
-          <Button variant="ghost" size="sm" onClick={handleEditTenant}>
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={handleEditTenant}
+            disabled={!isDetailsAvailable}
+            title={!isDetailsAvailable ? "Modification disponible dans 10 minutes après création" : "Modifier le tenant"}
+            className={!isDetailsAvailable ? "opacity-50 cursor-not-allowed" : ""}
+          >
             <Edit className="h-4 w-4" />
           </Button>
         </div>
@@ -144,21 +165,45 @@ const TenantTableRow = ({ tenant }: { tenant: Tenant }) => {
   )
 }
 
-const TenantFilters = ({ 
-  onFilterChange, 
-  onSearch,
-  onRefresh,
-  loading 
-}: {
+interface TenantFiltersProps {
   onFilterChange: (filters: any) => void
-  onSearch: (tenantName: string) => void
+  onSearch: (email: string) => void
   onRefresh: () => void
   loading: boolean
-}) => {
-  const [searchTenant, setSearchTenant] = useState("")
+}
 
-  const handleSearch = () => {
-    onSearch(searchTenant)
+function TenantFilters({ onFilterChange, onSearch, onRefresh, loading }: TenantFiltersProps) {
+  const [searchTerm, setSearchTerm] = useState("")
+  const [statusFilter, setStatusFilter] = useState("all")
+  // NOUVEAU FILTRE POUR subscriptionStatus
+  const [subscriptionStatusFilter, setSubscriptionStatusFilter] = useState("all")
+  const [pageSizeFilter, setPageSizeFilter] = useState("20")
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    onSearch(searchTerm)
+  }
+
+  const handleStatusChange = (value: string) => {
+    setStatusFilter(value)
+    onFilterChange({ 
+      status: value === "all" ? undefined : value,
+      subscriptionStatus: subscriptionStatusFilter === "all" ? undefined : subscriptionStatusFilter
+    })
+  }
+
+  // NOUVEAU HANDLER POUR subscriptionStatus
+  const handleSubscriptionStatusChange = (value: string) => {
+    setSubscriptionStatusFilter(value)
+    onFilterChange({ 
+      status: statusFilter === "all" ? undefined : statusFilter,
+      subscriptionStatus: value === "all" ? undefined : value
+    })
+  }
+
+  const handlePageSizeChange = (value: string) => {
+    setPageSizeFilter(value)
+    onFilterChange({ size: parseInt(value) })
   }
 
   return (
@@ -166,8 +211,8 @@ const TenantFilters = ({
       <CardHeader>
         <CardTitle className="flex items-center justify-between">
           <div className="flex items-center">
-            <Filter className="mr-2 h-5 w-5" />
-            Filtres
+            <Filter className="h-5 w-5 mr-2" />
+            Filtres et Recherche
           </div>
           <Button 
             variant="outline" 
@@ -181,109 +226,112 @@ const TenantFilters = ({
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Nom du Tenant</label>
-            <div className="flex space-x-2">
-              <Input
-                placeholder="Rechercher par nom..."
-                value={searchTenant}
-                onChange={(e) => setSearchTenant(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-              />
-              <Button variant="outline" size="sm" onClick={handleSearch}>
-                <Search className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-          
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Statut</label>
-            <Select onValueChange={(value) => onFilterChange({ status: value === "all" ? undefined : value })}>
-              <SelectTrigger>
-                <SelectValue placeholder="Tous les statuts" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Tous les statuts</SelectItem>
-                <SelectItem value="ACTIVE">Actif</SelectItem>
-                <SelectItem value="INACTIVE">Inactif</SelectItem>
-                <SelectItem value="SUSPENDED">Suspendu</SelectItem>
-                <SelectItem value="PENDING">En attente</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+          {/* Search */}
+          <form onSubmit={handleSearchSubmit} className="flex space-x-2">
+            <Input
+              placeholder="Rechercher un tenant..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="flex-1"
+            />
+            <Button type="submit" size="sm" variant="outline">
+              <Search className="h-4 w-4" />
+            </Button>
+          </form>
 
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Abonnement</label>
-            <Select onValueChange={(value) => onFilterChange({ subscription: value === "all" ? undefined : value })}>
-              <SelectTrigger>
-                <SelectValue placeholder="Tous les abonnements" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Tous les abonnements</SelectItem>
-                <SelectItem value="active">Actif</SelectItem>
-                <SelectItem value="expired">Expiré</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          {/* Status Filter */}
+          <Select value={statusFilter} onValueChange={handleStatusChange}>
+            <SelectTrigger>
+              <SelectValue placeholder="Statut" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tous les statuts</SelectItem>
+              <SelectItem value="ACTIVE">Actif</SelectItem>
+              <SelectItem value="INACTIVE">Inactif</SelectItem>
+              <SelectItem value="SUSPENDED">Suspendu</SelectItem>
+              <SelectItem value="PENDING">En attente</SelectItem>
+            </SelectContent>
+          </Select>
 
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Éléments par page</label>
-            <Select onValueChange={(value) => onFilterChange({ size: parseInt(value) })}>
-              <SelectTrigger>
-                <SelectValue placeholder="20" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="10">10 par page</SelectItem>
-                <SelectItem value="20">20 par page</SelectItem>
-                <SelectItem value="50">50 par page</SelectItem>
-                <SelectItem value="100">100 par page</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          {/* NOUVEAU FILTRE subscriptionStatus */}
+          <Select value={subscriptionStatusFilter} onValueChange={handleSubscriptionStatusChange}>
+            <SelectTrigger>
+              <SelectValue placeholder="Subscription" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Toutes les subscriptions</SelectItem>
+              <SelectItem value="PENDING">En attente</SelectItem>
+              <SelectItem value="ACTIVE">Active</SelectItem>
+              <SelectItem value="EXPIRED">Expirée</SelectItem>
+              <SelectItem value="GRACE">Période de grâce</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {/* Page Size */}
+          <Select value={pageSizeFilter} onValueChange={handlePageSizeChange}>
+            <SelectTrigger>
+              <SelectValue placeholder="Taille" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="10">10 par page</SelectItem>
+              <SelectItem value="20">20 par page</SelectItem>
+              <SelectItem value="50">50 par page</SelectItem>
+              <SelectItem value="100">100 par page</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {/* Clear Filters */}
+          <Button 
+            variant="outline" 
+            onClick={() => {
+              setSearchTerm("")
+              setStatusFilter("all")
+              setSubscriptionStatusFilter("all")
+              setPageSizeFilter("20")
+              onFilterChange({})
+              onSearch("")
+            }}
+            className="w-full"
+          >
+            Effacer
+          </Button>
         </div>
       </CardContent>
     </Card>
   )
 }
 
-const Pagination = ({ 
-  currentPage, 
-  totalPages, 
-  totalElements, 
-  pageSize, 
-  hasNext,
-  hasPrevious,
-  onPageChange 
-}: {
+interface PaginationProps {
   currentPage: number
   totalPages: number
   totalElements: number
   pageSize: number
-  hasNext: boolean
-  hasPrevious: boolean
   onPageChange: (page: number) => void
-}) => {
-  if (totalPages <= 1) return null
+}
+
+function Pagination({ currentPage, totalPages, totalElements, pageSize, onPageChange }: PaginationProps) {
+  const startItem = currentPage * pageSize + 1
+  const endItem = Math.min((currentPage + 1) * pageSize, totalElements)
 
   return (
     <div className="flex items-center justify-between">
-      <div className="text-sm text-gray-500">
-        Affichage {currentPage * pageSize + 1} à {Math.min((currentPage + 1) * pageSize, totalElements)} sur {totalElements} résultats
+      <div className="text-sm text-gray-700">
+        Affichage de {startItem} à {endItem} sur {totalElements} résultats
       </div>
+      
       <div className="flex items-center space-x-2">
         <Button
           variant="outline"
           size="sm"
           onClick={() => onPageChange(currentPage - 1)}
-          disabled={!hasPrevious}
+          disabled={currentPage === 0}
         >
-          Précédent
+          Previous
         </Button>
         
-        {/* Page numbers */}
         {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-          const pageNum = Math.max(0, currentPage - 2) + i
+          const pageNum = i + Math.max(0, currentPage - 2)
           if (pageNum >= totalPages) return null
           
           return (
@@ -302,9 +350,9 @@ const Pagination = ({
           variant="outline"
           size="sm"
           onClick={() => onPageChange(currentPage + 1)}
-          disabled={!hasNext}
+          disabled={currentPage >= totalPages - 1}
         >
-          Suivant
+          Next
         </Button>
       </div>
     </div>
@@ -312,7 +360,7 @@ const Pagination = ({
 }
 
 export default function TenantsPage() {
-  const router = useRouter()
+  const router = useRouter() 
 
   const {
     tenants,
@@ -325,7 +373,7 @@ export default function TenantsPage() {
     updatePage,
     updatePageSize,
     refresh
-  } = useTenants({ page: 0, size: 20 })
+  } = useTenants({ page: 0, size: 10 })
 
   const handleFilterChange = (newFilters: any) => {
     if (newFilters.size) {
@@ -335,8 +383,8 @@ export default function TenantsPage() {
     }
   }
 
-  const handleSearch = (tenantName: string) => {
-    updateFilters({ tenantName: tenantName || undefined })
+  const handleSearch = (email: string) => {
+    updateFilters({ tenantName: email || undefined })
   }
 
   return (
@@ -349,103 +397,13 @@ export default function TenantsPage() {
               <Building2 className="mr-3 h-8 w-8 text-blue-600" />
               Gestion des Tenants
             </h1>
-            <p className="text-gray-600">Gérer les organisations et leurs abonnements</p>
+            <p className="text-gray-600">Gérer les tenants et leurs abonnements</p>
           </div>
-          <Button 
-            className="bg-blue-600 hover:bg-blue-700"
-            onClick={() => router.push("/dashboard/tenants/add")}
-          >
+          <Button className="bg-blue-600 hover:bg-blue-700" onClick={() => router.push("/dashboard/tenants/add")}>
             <Plus className="mr-2 h-4 w-4" />
-            Ajouter Tenant
+            Ajouter un Tenant
           </Button>
         </div>
-
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center">
-                <Building2 className="h-8 w-8 text-blue-600" />
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Total Tenants</p>
-                  <p className="text-2xl font-bold">{pagination.totalElements}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center">
-                <Shield className="h-8 w-8 text-green-600" />
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Actifs</p>
-                  <p className="text-2xl font-bold">
-                    {tenants.filter(t => t.status === 'ACTIVE').length}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center">
-                <Users className="h-8 w-8 text-purple-600" />
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Abonnements Actifs</p>
-                  <p className="text-2xl font-bold">
-                    {tenants.filter(t => !t.subscriptionExpired).length}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center">
-                <Calendar className="h-8 w-8 text-red-600" />
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Abonnements Expirés</p>
-                  <p className="text-2xl font-bold">
-                    {tenants.filter(t => t.subscriptionExpired).length}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Access Level Warning */}
-        <Card className="border-blue-200 bg-blue-50">
-          <CardContent className="pt-6">
-            <div className="flex items-center text-blue-700">
-              <Shield className="h-5 w-5 mr-2" />
-              <span className="font-medium">ADMIN_PRINCIPAL Access Required</span>
-            </div>
-            <p className="text-blue-600 text-sm mt-1">
-              Cette page est accessible uniquement aux utilisateurs avec le rôle ADMIN_PRINCIPAL.
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Tenant Details Info */}
-        <Card className="border-amber-200 bg-amber-50">
-          <CardContent className="pt-6">
-            <div className="flex items-start text-amber-800">
-              <Clock className="h-5 w-5 mr-2 mt-0.5 flex-shrink-0" />
-              <div>
-                <span className="font-medium">Accès aux détails des tenants</span>
-                <p className="text-amber-700 text-sm mt-1">
-                  Les détails des tenants ne sont accessibles que 10 minutes après leur création 
-                  pour des raisons de sécurité et de provisioning. Les tenants "En attente" 
-                  ne peuvent pas être consultés en détail.
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
 
         {/* Filters */}
         <TenantFilters
@@ -472,24 +430,25 @@ export default function TenantsPage() {
 
             {loading ? (
               <div className="flex items-center justify-center py-8">
-                <RefreshCw className="h-6 w-6 animate-spin mr-2" />
+                <RefreshCw className="h-6 w-6 animate-spin text-blue-600 mr-2" />
                 <span>Chargement des tenants...</span>
               </div>
             ) : tenants.length === 0 ? (
               <div className="text-center py-8">
                 <Building2 className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-500">Aucun tenant trouvé</p>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">Aucun tenant trouvé</h3>
+                <p className="text-gray-600">Commencez par créer votre premier tenant.</p>
               </div>
             ) : (
-              <>
+              <div className="space-y-4">
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Statut</TableHead>
                       <TableHead>Tenant</TableHead>
                       <TableHead>Administrateur</TableHead>
-                      <TableHead>Abonnement</TableHead>
-                      <TableHead>Créé le</TableHead>
+                      <TableHead>Subscription</TableHead>
+                      <TableHead>Date de création</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -500,18 +459,15 @@ export default function TenantsPage() {
                   </TableBody>
                 </Table>
 
-                <div className="mt-6">
-                  <Pagination
-                    currentPage={currentPage}
-                    totalPages={pagination.totalPages}
-                    totalElements={pagination.totalElements}
-                    pageSize={pageSize}
-                    hasNext={pagination.hasNext}
-                    hasPrevious={pagination.hasPrevious}
-                    onPageChange={updatePage}
-                  />
-                </div>
-              </>
+                {/* Pagination */}
+                <Pagination
+                  currentPage={currentPage}
+                  totalPages={pagination.totalPages}
+                  totalElements={pagination.totalElements}
+                  pageSize={pageSize}
+                  onPageChange={updatePage}
+                />
+              </div>
             )}
           </CardContent>
         </Card>

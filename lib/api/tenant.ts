@@ -65,12 +65,9 @@ export const tenantApi = {
    */
   createTenant: async (tenantData: CreateTenantRequest): Promise<TenantCreationResponse> => {
     try {
-      console.log("🏢 Creating new tenant:", tenantData.tenantName)
-      console.log("🔍 Tenant data:", tenantData)
-
-      const response = await apiClient.post(`/api/tenants`, tenantData, {
-        includeUserEmail: true // Add X-User-Email header automatically
-      })
+      console.log("🆕 Creating tenant:", tenantData.tenantName)
+      
+      const response = await apiClient.post('/api/tenants', tenantData)
       
       console.log("✅ Tenant created successfully:", response.data)
       return response.data
@@ -80,68 +77,62 @@ export const tenantApi = {
         status: error.response?.status,
         statusText: error.response?.statusText,
         data: error.response?.data,
-        url: error.config?.url,
-        requestData: tenantData
+        url: error.config?.url
       })
       throw error
     }
   },
 
   /**
-   * Check if tenant details are available (10 minutes rule)
+   * Delete a tenant by ID
    */
-  isTenantDetailsAvailable: (createdAt: number): boolean => {
-    const now = Date.now()
-    const tenMinutes = 10 * 60 * 1000 // 10 minutes in milliseconds
-    const timeSinceCreation = now - createdAt
-    
-    console.log("⏰ Checking tenant availability:", {
-      createdAt: new Date(createdAt).toISOString(),
-      now: new Date(now).toISOString(),
-      timeSinceCreation: Math.floor(timeSinceCreation / 1000 / 60), // minutes
-      isAvailable: timeSinceCreation >= tenMinutes
-    })
-    
-    return timeSinceCreation >= tenMinutes
-  },
-
-  /**
-   * Get remaining time until tenant details are available
-   */
-  getRemainingTime: (createdAt: number): number => {
-    const now = Date.now()
-    const tenMinutes = 10 * 60 * 1000
-    const timeSinceCreation = now - createdAt
-    const remainingTime = tenMinutes - timeSinceCreation
-    
-    return Math.max(0, remainingTime)
-  },
-
-  /**
-   * Assign subscription to tenant
-   */
-  assignSubscription: async (request: AssignSubscriptionRequest): Promise<any> => {
+  deleteTenant: async (tenantId: string): Promise<void> => {
     try {
-      console.log("💳 Assigning subscription to tenant:", request.tenantId)
+      console.log("🗑️ Deleting tenant:", tenantId)
+      
+      await apiClient.delete(`/api/tenants/${tenantId}`)
+      
+      console.log("✅ Tenant deleted successfully")
+    } catch (error: any) {
+      console.error("❌ Failed to delete tenant:", error)
+      console.error("❌ Error details:", {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        url: error.config?.url
+      })
+      throw error
+    }
+  },
+
+  /**
+   * Assign a subscription plan to a tenant
+   */
+  assignSubscription: async (
+    tenantId: string,
+    subscriptionData: AssignSubscriptionRequest
+  ): Promise<void> => {
+    try {
+      console.log("📋 Assigning subscription to tenant:", tenantId)
       
       const formData = new FormData()
-      formData.append('planId', request.planId)
-      formData.append('billingMethod', request.billingMethod)
-      formData.append('autoRenew', request.autoRenew.toString())
       
-      if (request.receiptFile) {
-        formData.append('receiptFile', request.receiptFile)
-      }
+      // Add subscription data
+      Object.entries(subscriptionData).forEach(([key, value]) => {
+        if (key !== 'receiptFile' && value !== undefined) {
+          formData.append(key, value.toString())
+        }
+      })
       
-      if (request.customExpiryDate) {
-        formData.append('customExpiryDate', request.customExpiryDate)
+      // Add receipt file if provided
+      if (subscriptionData.receiptFile) {
+        formData.append('receiptFile', subscriptionData.receiptFile)
       }
 
       const response = await apiClient.post(
-        `/api/tenants/${request.tenantId}/subscription`,
+        `/api/tenants/${tenantId}/subscription`,
         formData,
         {
-          includeUserEmail: true,
           headers: {
             'Content-Type': 'multipart/form-data',
           },
@@ -149,9 +140,14 @@ export const tenantApi = {
       )
       
       console.log("✅ Subscription assigned successfully:", response.data)
-      return response.data
     } catch (error: any) {
       console.error("❌ Failed to assign subscription:", error)
+      console.error("❌ Error details:", {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        url: error.config?.url
+      })
       throw error
     }
   }

@@ -4,11 +4,10 @@
 // SUBSCRIPTION STATUSES
 // ===============================================================================
 export const SUBSCRIPTION_STATUS = {
+  PENDING: 'PENDING',
   ACTIVE: 'ACTIVE',
-  REMINDER: 'REMINDER', 
-  CRITICAL: 'CRITICAL',
-  GRACE_PERIOD: 'GRACE_PERIOD',
-  SUSPENDED: 'SUSPENDED'
+  EXPIRED: 'EXPIRED',
+  GRACE: 'GRACE'
 } as const
 
 export type SubscriptionStatus = typeof SUBSCRIPTION_STATUS[keyof typeof SUBSCRIPTION_STATUS]
@@ -131,11 +130,10 @@ export type Currency = typeof CURRENCIES[keyof typeof CURRENCIES]
 export const STATUS_COLORS = {
   // Subscription Status Colors
   SUBSCRIPTION: {
+    PENDING: 'orange',
     ACTIVE: 'green',
-    REMINDER: 'orange',
-    CRITICAL: 'red',
-    GRACE_PERIOD: 'yellow',
-    SUSPENDED: 'gray'
+    EXPIRED: 'red',
+    GRACE: 'yellow'
   },
   // Invoice Status Colors
   INVOICE: {

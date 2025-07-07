@@ -10,6 +10,8 @@ export interface Tenant {
   createdAt: number
   active: boolean
   subscriptionExpired: boolean
+  subscriptionStatus: SubscriptionStatus
+  isActive: boolean
 }
 
 export interface TenantPagination {
@@ -35,7 +37,7 @@ export interface TenantFilters {
 }
 
 // ===============================================================================
-// DETAILED TENANT INTERFACES - ÉTENDUES AVEC SUBSCRIPTION/BILLING/USAGE
+// DETAILED TENANT INTERFACES - SUPPRESSION DES CHAMPS BILLING
 // ===============================================================================
 
 export interface DatabaseCredentials {
@@ -62,20 +64,6 @@ export interface TenantDetails {
   
   // ===== SUBSCRIPTION FIELDS =====
   plan: PlanInfo | null
-  planStartDate: number | null
-  planExpiryDate: number | null
-  isTrialActive: number
-  trialExpiryDate: number | null
-  isAutoProlanged: number
-  isManuallyProlanged: number
-  prolongedBy: string | null
-  autoRenewalEnabled: number
-  nextBillingDate: number | null
-  isInGracePeriod: number
-  gracePeriodStartDate: number | null
-  gracePeriodEndDate: number | null
-  suspensionDate: number | null
-  suspensionReason: string | null
   
   // ===== USAGE FIELDS =====
   currentDatabaseUsageMB: number
@@ -92,21 +80,6 @@ export interface TenantDetails {
   lastResourceAlertDate: number | null
   activeWarnings: string[]
   
-  // ===== BILLING FIELDS =====
-  billingMethod: string | null
-  billingEmail: string
-  currentPlanPrice: number | null
-  currency: Currency
-  totalAmountPaid: number | null
-  outstandingAmount: number | null
-  lastPaymentDate: number | null
-  lastPaymentStatus: string | null
-  invoiceIds: string[]
-  pendingPlanChange: any | null
-  planChangeEffectiveDate: number | null
-  planChangeReason: string | null
-  planHistory: any | null
-  
   // ===== LOCATION & CONFIG FIELDS =====
   region: string
   industry: string
@@ -121,14 +94,11 @@ export interface TenantDetails {
   parentTenantId: string | null
   childTenantIds: string[]
   domains: string[]
-  autoProlangedAt: number | null
-  manuallyProlangedAt: number | null
-
-  // ===== PLAN LIMITS =====
-  maxUsers: number
-  maxEmployees: number
-  maxDatabaseStorageMB: number
-  maxS3StorageMB: number
+  
+  // ===== AUDIT TRAIL =====
+  statusHistory: any[] | null
+  subscriptionHistory: any[] | null
+  legalNumbers: any | null
 }
 
 export interface AdminUser {
@@ -156,8 +126,8 @@ export interface TenantDetailResponse {
   data: {
     tenant: TenantDetails
     adminUser: AdminUser
-    active: boolean
-    subscriptionExpired: boolean
+    isActive: boolean
+    subscriptionStatus: SubscriptionStatus
   }
 }
 
@@ -173,12 +143,12 @@ export interface CreateTenantRequest {
   country: string
   city: string
   address: string
-  postalCode?: string // Nouveau champ
+  postalCode?: string
   phone: string
   billingEmail: string
   timeZone: string
   language: string
-  legalNumbers?: Record<string, string> // Nouveau champ dynamique
+  legalNumbers?: Record<string, string>
   
   // Admin Information
   adminEmail: string
@@ -262,20 +232,6 @@ export interface TenantUsageMetrics {
   }
 }
 
-export interface TenantBillingInfo {
-  currentPlan: PlanInfo | null
-  planPrice: number | null
-  currency: Currency
-  nextBilling: number | null
-  autoRenewal: boolean
-  outstandingAmount: number | null
-  lastPayment: {
-    date: number | null
-    status: string | null
-    amount: number | null
-  }
-}
-
 // ===============================================================================
 // TENANT MONITORING INTERFACES
 // ===============================================================================
@@ -291,7 +247,6 @@ export interface TenantMonitoringData {
     isInGracePeriod: boolean
   }
   usage: TenantUsageMetrics
-  billing: TenantBillingInfo
   alerts: TenantAlert[]
   lastUpdated: number
 }
@@ -316,11 +271,11 @@ export interface TenantSummary {
   createdAt: number
   active: boolean
   subscriptionExpired: boolean
+  subscriptionStatus: SubscriptionStatus
+  isActive: boolean
   // Extended fields
   plan: PlanInfo | null
   planExpiryDate: number | null
-  currentPlanPrice: number | null
-  currency: Currency
   suspensionReason: string | null
   usageAlerts: number
   daysUntilExpiry: number

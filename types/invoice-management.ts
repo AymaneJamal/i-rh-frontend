@@ -34,6 +34,13 @@ export interface Invoice {
   generatedBy: string
   createdAt: number
   modifiedAt?: number
+  autoRenewalEnabled?: number
+  isAutoGracePeriod?: number
+  isManualGracePeriod?: number
+  manualGracePeriodSetBy?: string
+  manualGracePeriodSetAt?: number
+  gracePeriodStartDate?: number
+  gracePeriodEndDate?: number
 }
 
 // ===============================================================================
