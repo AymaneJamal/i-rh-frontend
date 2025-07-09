@@ -1,50 +1,108 @@
-// types/invoice-management.ts
+// types/invoice-management.ts - MISE À JOUR POUR CORRESPONDRE AU MODÈLE JAVA INVOICE
+
 import { BillingType, InvoiceTemplate, InvoiceStatus, PaymentStatus, PaymentMethod, Currency } from "@/lib/constants"
 
 // ===============================================================================
-// CORE INVOICE INTERFACES
+// INTERFACE PRINCIPALE INVOICE (correspond au modèle Java)
 // ===============================================================================
 
 export interface Invoice {
+  // Identifiants et informations de base
   invoiceId: string
-  invoiceNumber: string
+  invoiceNumber: string // Numéro de facture lisible (INV-2024-001)
   tenantId: string
   tenantName: string
+  
+  // Informations temporelles
+  issueDate: number // Date d'émission
+  dueDate: number | null // Date d'échéance
+  paidDate: number | null // Date de paiement (null si pas payé)
+  createdAt: number
+  modifiedAt: number | null
+  modifiedBy: string | null
+  
+  // Informations du plan et de la période
   planId: string
   planName: string
-  issueDate: number
-  dueDate: number
-  billingType: BillingType
+  billingPeriodStart: number
+  billingPeriodEnd: number
+  billingType: string // MONTHLY, YEARLY, PRORATA, UPGRADE, DOWNGRADE
+  
+  // Montants et calculs financiers
   subtotalAmount: number
   taxAmount: number
-  taxRate: number
+  taxRate: number // Taux de taxe appliqué (ex: 0.20 pour 20%)
   totalAmount: number
-  currency: Currency
-  status: InvoiceStatus
-  paymentStatus: PaymentStatus
-  paidDate?: number
-  paidAmount?: number
-  remainingAmount?: number
-  paymentMethod?: PaymentMethod
-  paymentReference?: string
-  pdfFileUrl: string
-  invoiceTemplate: InvoiceTemplate
-  remindersSent?: number
-  lastReminderDate?: number
+  currency: string | null // Devise (EUR, USD, MAD, etc.)
+  discountAmount: number
+  discountReason: string | null
+  
+  // Détails des lignes de facturation
+  lineItems: any[] | null // List<Map<String, Object>> en Java
+  
+  // Statut et paiement
+  status: string // DRAFT, SENT, PAID, OVERDUE, CANCELLED, REFUNDED
+  paymentStatus: string // PENDING, PAID, FAILED, PARTIAL, REFUNDED
+  paymentMethod: string | null // CREDIT_CARD, BANK_TRANSFER, PAYPAL, etc.
+  paymentReference: string | null
+  paidAmount: number
+  remainingAmount: number
+  
+  // Informations de facturation du client
+  billingEmail: string
+  billingName: string
+  billingAddress: any // Map<String, Object> en Java
+  vatNumber: string | null
+  
+  // Documents et fichiers associés
+  pdfFileUrl: string | null
+  s3BucketName: string | null
+  s3Key: string | null
+  attachments: any[] | null // List<Map<String, String>> en Java
+  
+  // Informations de génération et envoi
   generatedBy: string
-  createdAt: number
-  modifiedAt?: number
-  autoRenewalEnabled?: number
-  isAutoGracePeriod?: number
-  isManualGracePeriod?: number
-  manualGracePeriodSetBy?: string
-  manualGracePeriodSetAt?: number
-  gracePeriodStartDate?: number
-  gracePeriodEndDate?: number
+  sentDate: number | null
+  emailSent: number | null // 0 = Non envoyé, 1 = Envoyé
+  emailSentTo: string | null
+  remindersSent: number | null
+  lastReminderDate: number | null
+  
+  // Informations comptables et légales
+  fiscalYear: string | null
+  legalEntity: string | null
+  invoiceTemplate: string | null
+  notes: string | null
+  termsAndConditions: string | null
+  
+  // Traçabilité et audit
+  auditTrail: any[] | null // List<Map<String, Object>> en Java
+  parentInvoiceId: string | null
+  invoiceType: string // STANDARD, PREPAYE
+  isPrepayedInvoiceReason: string | null
+  isPrepayeInvoiceContab: number
+  isRecurring: number | null // 0 = Non, 1 = Facture récurrente
+  recurringSchedule: string | null
+  
+  // Informations de crédit et remboursement
+  creditReason: string | null
+  refundAmount: number | null
+  refundDate: number | null
+  refundReason: string | null
+  
+  // Attributs de paiements (du modèle Invoice Java)
+  autoRenewalEnabled: number | null // 0 = Désactivé, 1 = Activé
+  isAutoGracePeriod: number | null
+  isManualGracePeriod: number | null
+  manualGracePeriodSetBy: string | null
+  manualGracePeriodSetAt: number | null
+  manualGracePeriodModifiedAt: number | null
+  gracePeriodStartDate: number | null
+  gracePeriodEndDate: number | null
 }
 
 // ===============================================================================
-// GENERATE INVOICE INTERFACES
+// INTERFACES POUR LES RÉPONSES API
 // ===============================================================================
 
 export interface GenerateInvoiceRequest {
@@ -74,21 +132,21 @@ export interface GenerateMonthlyInvoicesResponse {
 }
 
 // ===============================================================================
-// INVOICE HISTORY INTERFACES
+// INTERFACES POUR L'HISTORIQUE DES FACTURES
 // ===============================================================================
 
 export interface InvoiceHistoryItem {
   invoiceId: string
   invoiceNumber: string
   issueDate: number
-  dueDate: number
+  dueDate: number | null
   totalAmount: number
-  currency: Currency
-  status: InvoiceStatus
-  paymentStatus: PaymentStatus
+  currency: string | null
+  status: string
+  paymentStatus: string
   paidDate?: number
   paidAmount?: number
-  paymentMethod?: PaymentMethod
+  paymentMethod?: string
   planName: string
 }
 
@@ -125,7 +183,7 @@ export interface TenantPlansHistoryResponse {
 }
 
 // ===============================================================================
-// RECEIPT UPLOAD INTERFACES
+// INTERFACES POUR L'UPLOAD DE REÇUS
 // ===============================================================================
 
 export interface ReceiptUploadRequest {
@@ -148,7 +206,7 @@ export interface ReceiptUploadResponse {
 }
 
 // ===============================================================================
-// PAYMENT INTERFACES
+// INTERFACES POUR LES PAIEMENTS
 // ===============================================================================
 
 export interface MarkPaidRequest {
@@ -177,7 +235,7 @@ export interface MarkPaidResponse {
 }
 
 // ===============================================================================
-// UNPAID & OVERDUE INTERFACES
+// INTERFACES POUR LES FACTURES IMPAYÉES ET EN RETARD
 // ===============================================================================
 
 export interface UnpaidInvoice {
@@ -223,7 +281,7 @@ export interface OverdueInvoicesResponse {
 }
 
 // ===============================================================================
-// REMINDER INTERFACES
+// INTERFACES POUR LES RAPPELS
 // ===============================================================================
 
 export interface SendReminderResponse {
@@ -241,7 +299,7 @@ export interface SendReminderResponse {
 }
 
 // ===============================================================================
-// FINANCIAL DASHBOARD INTERFACES
+// INTERFACES POUR LE DASHBOARD FINANCIER
 // ===============================================================================
 
 export interface FinancialStats {
@@ -268,87 +326,11 @@ export interface RecentActivity {
 export interface FinancialDashboardResponse {
   success: boolean
   data: {
-    financialStats: FinancialStats
+    stats: FinancialStats
     criticalTenants: CriticalTenants
     recentActivity: RecentActivity[]
-    generatedAt: number
   }
   message: string
   requestId: string
   timestamp: number
 }
-
-// ===============================================================================
-// DETAILED FINANCIAL STATS INTERFACES
-// ===============================================================================
-
-export interface BillingStats {
-  totalRevenue: number
-  totalInvoices: number
-  paidInvoices: number
-  unpaidInvoices: number
-}
-
-export interface MonthlyEvolution {
-  [monthYear: string]: number
-}
-
-export interface FinancialStatsResponse {
-  success: boolean
-  data: {
-    billing: BillingStats
-    totalRevenue: number
-    monthlyEvolution: MonthlyEvolution
-    projectedRevenue: number
-    period: string
-    generatedAt: number
-  }
-  message: string
-  requestId: string
-  timestamp: number
-}
-
-// ===============================================================================
-// ERROR INTERFACES
-// ===============================================================================
-
-export interface InvoiceErrorResponse {
-  success: false
-  error: string
-  requestId: string
-  timestamp: number
-}
-
-// ===============================================================================
-// UTILITY INTERFACES
-// ===============================================================================
-
-export interface InvoiceFilters {
-  status?: InvoiceStatus
-  paymentStatus?: PaymentStatus
-  tenantId?: string
-  dateFrom?: number
-  dateTo?: number
-}
-
-export interface InvoiceMetrics {
-  totalInvoices: number
-  paidInvoices: number
-  unpaidInvoices: number
-  overdueInvoices: number
-  totalRevenue: number
-  unpaidAmount: number
-  overdueAmount: number
-}
-
-export interface PaymentSummary {
-  method: PaymentMethod
-  count: number
-  totalAmount: number
-}
-
-// ===============================================================================
-// FINANCIAL PERIODS
-// ===============================================================================
-
-export type FinancialPeriod = 'current_month' | 'last_month' | 'current_year' | 'last_year'

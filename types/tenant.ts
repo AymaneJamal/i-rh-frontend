@@ -1,4 +1,4 @@
-// types/tenant.ts
+// types/tenant.ts - MISE À JOUR POUR CORRESPONDRE AU BACKEND JAVA
 
 import { Currency, SubscriptionStatus } from "@/lib/constants"
 
@@ -37,35 +37,43 @@ export interface TenantFilters {
 }
 
 // ===============================================================================
-// DETAILED TENANT INTERFACES - SUPPRESSION DES CHAMPS BILLING
+// TYPES CORRESPONDANT AU MODÈLE JAVA TENANT
 // ===============================================================================
 
 export interface DatabaseCredentials {
+  admin: string // Correspond au Map<String, String> du backend
   password: string
-  username: string
 }
 
 export interface PlanInfo {
+  id: string // Correspond au Map<String, String> plan du backend  
   name: string
-  id: string
 }
 
 export interface TenantDetails {
+  // Identifiants et informations de base (correspond au modèle Java)
   id: string
   name: string
   adminId: string
   linkLogo: string | null
-  status: string
+  status: string // ACTIVE, PENDING, SUSPENDED, DELETED, TRIAL, EXPIRED
   createdAt: number
   modifiedAt: number
   createdBy: string
+  
+  // Informations de base de données
   databaseUrl: string
   databaseCredentials: DatabaseCredentials
   
-  // ===== SUBSCRIPTION FIELDS =====
+  // ===== GESTION DES SUBSCRIPTIONS (du modèle Java) =====
   plan: PlanInfo | null
   
-  // ===== USAGE FIELDS =====
+  // Gestion des périodes de grâce et suspensions
+  isInGracePeriod: number // 0 = Non, 1 = En période de grâce
+  suspensionDate: number | null // Date de suspension du tenant
+  suspensionReason: string | null // Raison de la suspension
+  
+  // ===== CONSOMMATION DES RESSOURCES (du modèle Java) =====
   currentDatabaseUsageMB: number
   currentS3UsageMB: number
   currentUsersCount: number
@@ -80,7 +88,22 @@ export interface TenantDetails {
   lastResourceAlertDate: number | null
   activeWarnings: string[]
   
-  // ===== LOCATION & CONFIG FIELDS =====
+  // ===== FACTURATION ET PAIEMENTS (du modèle Java) =====
+  billingEmail: string
+  currentPlanPrice: number
+  currency: string
+  totalAmount: number
+  totalAmountPaid: number
+  outstandingAmount: number
+  invoiceIds: string[]
+  
+  // Informations de changement de plan
+  pendingPlanChange: any | null
+  planChangeEffectiveDate: number | null
+  planChangeReason: string | null
+  planHistory: any[]
+  
+  // ===== LOCALISATION ET CONFIGURATION =====
   region: string
   industry: string
   phone: string
@@ -132,7 +155,49 @@ export interface TenantDetailResponse {
 }
 
 // ===============================================================================
-// TENANT CREATION INTERFACES
+// TYPES POUR LES DONNÉES D'USAGE ET SUBSCRIPTION (correspond aux API responses)
+// ===============================================================================
+
+export interface TenantUsageData {
+  // Utilisation actuelle
+  currentDatabaseUsageMB: number
+  currentS3UsageMB: number
+  currentUsersCount: number
+  currentEmployeesCount: number
+  
+  // Alertes
+  activeWarnings: string[]
+  hasAlerts: number
+  lastUpdated: number
+  
+  // Limites du plan
+  planLimits: {
+    maxDatabaseStorageMB: number
+    maxS3StorageMB: number
+    maxUsers: number
+    maxEmployees: number
+  }
+  
+  // Pourcentages d'utilisation
+  usagePercentages: {
+    databasePercent: number
+    s3Percent: number
+    usersPercent: number
+    employeesPercent: number
+  }
+  
+  // Informations de facturation et de grâce (peuvent être présentes selon l'API)
+  nextBillingDate?: number
+  autoRenewalEnabled?: boolean
+  isInGracePeriod?: number
+  gracePeriodStartDate?: number
+  gracePeriodEndDate?: number
+  manualGracePeriodSetBy?: string
+  manualGracePeriodSetAt?: number
+}
+
+// ===============================================================================
+// INTERFACES POUR LA CRÉATION DE TENANT
 // ===============================================================================
 
 export interface CreateTenantRequest {
@@ -175,31 +240,7 @@ export interface TenantCreationResponse {
 }
 
 // ===============================================================================
-// SUBSCRIPTION INTERFACES - HÉRITÉS DES TYPES SUBSCRIPTION
-// ===============================================================================
-
-export interface SubscriptionPlan {
-  id: string
-  name: string
-  price: number
-  duration: number // in months
-  features: string[]
-  maxUsers: number
-  maxStorage: number // in GB
-  support: string
-}
-
-export interface AssignSubscriptionRequest {
-  tenantId: string
-  planId: string
-  billingMethod: string
-  receiptFile?: File
-  autoRenew: boolean
-  customExpiryDate?: string
-}
-
-// ===============================================================================
-// TENANT EXTENDED STATUS INTERFACES
+// INTERFACES POUR LES STATUTS ÉTENDUS
 // ===============================================================================
 
 export interface TenantExtendedStatus {
@@ -232,25 +273,6 @@ export interface TenantUsageMetrics {
   }
 }
 
-// ===============================================================================
-// TENANT MONITORING INTERFACES
-// ===============================================================================
-
-export interface TenantMonitoringData {
-  tenantId: string
-  tenantName: string
-  status: TenantExtendedStatus
-  subscription: {
-    plan: PlanInfo | null
-    expiryDate: number | null
-    daysRemaining: number
-    isInGracePeriod: boolean
-  }
-  usage: TenantUsageMetrics
-  alerts: TenantAlert[]
-  lastUpdated: number
-}
-
 export interface TenantAlert {
   type: 'EXPIRING' | 'OVERDUE' | 'USAGE_LIMIT' | 'PAYMENT_FAILED' | 'SUSPENDED'
   severity: 'INFO' | 'WARNING' | 'CRITICAL'
@@ -258,10 +280,6 @@ export interface TenantAlert {
   timestamp: number
   acknowledged: boolean
 }
-
-// ===============================================================================
-// TENANT SUMMARY FOR LISTS
-// ===============================================================================
 
 export interface TenantSummary {
   tenantId: string
@@ -282,7 +300,7 @@ export interface TenantSummary {
 }
 
 // ===============================================================================
-// TENANT BULK OPERATIONS
+// INTERFACES POUR LES OPÉRATIONS EN BULK
 // ===============================================================================
 
 export interface BulkTenantOperation {

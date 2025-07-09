@@ -78,8 +78,8 @@ export const tenantSubscriptionApi = {
     return response.data
   },
 
-  reactivateTenant: async (tenantId: string, newPlanId?: string) => {
-    const queryParams = newPlanId ? apiClient.buildQueryString({ newPlanId }) : ''
+  reactivateTenant: async (tenantId: string, reason?: string) => {
+    const queryParams = reason ? apiClient.buildQueryString({ reason }) : ''
 
     const response = await apiClient.postWithUserEmail(
       `/api/subscriptions/tenants/${tenantId}/reactivate${queryParams}`
@@ -163,8 +163,8 @@ export const tenantSubscriptionApi = {
     return response.data
   },
 
-  reactivateTenantWithCustomUser: async (tenantId: string, userEmail: string, newPlanId?: string) => {
-    const queryParams = newPlanId ? apiClient.buildQueryString({ newPlanId }) : ''
+  reactivateTenantWithCustomUser: async (tenantId: string, userEmail: string, reason?: string) => {
+    const queryParams = reason ? apiClient.buildQueryString({ reason }) : ''
 
     const response = await apiClient.postWithCustomUserEmail(
       `/api/subscriptions/tenants/${tenantId}/reactivate${queryParams}`,

@@ -1,6 +1,31 @@
 // lib/api/tenant.ts
 import { apiClient } from "@/lib/api-client"
-import { TenantResponse, TenantFilters, TenantDetailResponse, AssignSubscriptionRequest, CreateTenantRequest, TenantCreationResponse } from "@/types/tenant"
+import { TenantResponse, TenantFilters, TenantDetailResponse, CreateTenantRequest, TenantCreationResponse } from "@/types/tenant"
+
+// Interface correspondant exactement à votre AssignPlanRequest (sans receiptFile)
+interface AssignSubscriptionRequest {
+  tenantId: string
+  planId: string
+  startDate?: number
+  endDate?: number
+  autoRenewalEnabled: number
+  billingMethod: string
+  isAutoGracePeriod: number
+  isManualGracePeriod: number
+  manualGracePeriod?: number
+  invoiceType: string
+  isPrepayeInvoiceContab?: number
+  isPrepayedInvoiceReason?: string
+  isCustomPrize?: number
+  taxeRate: number
+  withRecus: number
+  invoiceStatus?: string
+  dueDate?: number
+  paidAmount?: number
+  paymentMethod?: string
+  paymentReference?: string
+  paymentStatus?: string
+}
 
 export const tenantApi = {
   /**
@@ -107,26 +132,24 @@ export const tenantApi = {
 
   /**
    * Assign a subscription plan to a tenant
+   * receiptFile est envoyé séparément comme dans le backend Spring
    */
   assignSubscription: async (
     tenantId: string,
-    subscriptionData: AssignSubscriptionRequest
+    subscriptionData: AssignSubscriptionRequest,
+    receiptFile?: File
   ): Promise<void> => {
     try {
       console.log("📋 Assigning subscription to tenant:", tenantId)
       
       const formData = new FormData()
       
-      // Add subscription data
-      Object.entries(subscriptionData).forEach(([key, value]) => {
-        if (key !== 'receiptFile' && value !== undefined) {
-          formData.append(key, value.toString())
-        }
-      })
+      // Ajouter le JSON request en tant que string (comme votre backend l'attend)
+      formData.append('request', JSON.stringify(subscriptionData))
       
-      // Add receipt file if provided
-      if (subscriptionData.receiptFile) {
-        formData.append('receiptFile', subscriptionData.receiptFile)
+      // Ajouter le fichier séparément si présent (comme @RequestParam("receipt"))
+      if (receiptFile) {
+        formData.append('receipt', receiptFile)
       }
 
       const response = await apiClient.post(

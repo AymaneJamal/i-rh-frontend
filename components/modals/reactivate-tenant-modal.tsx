@@ -12,28 +12,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
-import { Card, CardContent } from "@/components/ui/card"
-import { useSubscriptionPlans } from "@/hooks/use-subscription-plans"
-import { formatCurrency } from "@/lib/formatters"
-import { Currency } from "@/lib/constants"
-import { Play, Building2, Crown, CheckCircle, AlertTriangle } from "lucide-react"
+import { Play, Building2, CheckCircle, AlertTriangle, RefreshCw } from "lucide-react"
 
 interface ReactivateTenantModalProps {
   isOpen: boolean
   onClose: () => void
   tenantId: string
   tenantName: string
-  currentPlanId?: string | null
-  onReactivateConfirm: (newPlanId?: string) => Promise<void>
+  onReactivateConfirm: (reason: string) => Promise<void>
   loading?: boolean
 }
 
@@ -42,266 +30,134 @@ export function ReactivateTenantModal({
   onClose,
   tenantId,
   tenantName,
-  currentPlanId,
   onReactivateConfirm,
   loading = false
 }: ReactivateTenantModalProps) {
-  const [selectedPlanId, setSelectedPlanId] = useState<string>("")
-  const [notes, setNotes] = useState<string>("")
+  const [reason, setReason] = useState<string>("")
   const [error, setError] = useState<string | null>(null)
-  const [step, setStep] = useState<'confirm' | 'plan' | 'final'>('confirm')
-
-  const { plans, loading: plansLoading } = useSubscriptionPlans({ publicOnly: true })
+  const [success, setSuccess] = useState(false)
 
   const handleClose = () => {
     if (!loading) {
-      setSelectedPlanId("")
-      setNotes("")
+      setReason("")
       setError(null)
-      setStep('confirm')
+      setSuccess(false)
       onClose()
     }
   }
 
-  const handleContinue = () => {
-    setStep('plan')
-  }
-
-  const handlePlanNext = () => {
-    if (!selectedPlanId) {
-      setError("Veuillez sélectionner un plan pour la réactivation")
+  const handleSubmit = async () => {
+    if (!reason.trim()) {
+      setError("La raison de la réactivation est obligatoire")
       return
     }
-    setError(null)
-    setStep('final')
-  }
 
-  const handleFinalReactivate = async () => {
     try {
       setError(null)
-      await onReactivateConfirm(selectedPlanId || undefined)
-      handleClose()
+      await onReactivateConfirm(reason.trim())
+      setSuccess(true)
+      
+      // Auto-close after success
+      setTimeout(() => {
+        handleClose()
+      }, 1500)
     } catch (err: any) {
       setError(err.message || "Erreur lors de la réactivation")
     }
   }
 
-  const selectedPlan = plans.find(plan => plan.planId === selectedPlanId)
-
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center text-green-600">
             <Play className="h-5 w-5 mr-2" />
-            {step === 'confirm' && 'Réactiver le Tenant'}
-            {step === 'plan' && 'Sélection du Plan'}
-            {step === 'final' && 'Confirmer la Réactivation'}
+            Réactiver le Tenant
           </DialogTitle>
           <DialogDescription>
-            {step === 'confirm' && `Vous êtes sur le point de réactiver le tenant "${tenantName}". Cette action restaurera l'accès à tous les services.`}
-            {step === 'plan' && 'Choisissez le plan d\'abonnement pour la réactivation.'}
-            {step === 'final' && 'Vérifiez les informations et confirmez la réactivation.'}
+            Réactivez le tenant suspendu pour restaurer l'accès à tous les services.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
-          {/* Informations du tenant */}
-          <div className="bg-gray-50 p-3 rounded-lg">
-            <div className="flex items-center space-x-2 text-sm text-gray-600">
-              <Building2 className="h-4 w-4" />
-              <span className="font-medium">{tenantName}</span>
-              <Badge variant="outline" className="text-xs">ID: {tenantId}</Badge>
-              <Badge variant="destructive" className="text-xs">SUSPENDU</Badge>
-            </div>
+        {success ? (
+          <div className="text-center py-6">
+            <CheckCircle className="h-16 w-16 text-green-500 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-green-800 mb-2">
+              Tenant réactivé avec succès !
+            </h3>
+            <p className="text-gray-600">
+              Le tenant {tenantName} est maintenant actif.
+            </p>
           </div>
-
-          {/* Étape 1: Confirmation */}
-          {step === 'confirm' && (
-            <div className="space-y-4">
-              <Alert>
-                <CheckCircle className="h-4 w-4" />
-                <AlertDescription>
-                  <strong>Réactivation du tenant :</strong>
-                  <ul className="mt-2 text-sm list-disc list-inside space-y-1">
-                    <li>Restaurera l'accès immédiatement</li>
-                    <li>Permettra les connexions des utilisateurs</li>
-                    <li>Rendra les données à nouveau accessibles</li>
-                    <li>Reprendra la facturation selon le plan sélectionné</li>
-                  </ul>
-                </AlertDescription>
-              </Alert>
-
-              {currentPlanId && (
-                <div className="bg-blue-50 p-3 rounded-lg">
-                  <p className="text-blue-700 text-sm">
-                    <strong>Plan précédent :</strong> {currentPlanId}
-                  </p>
-                  <p className="text-blue-600 text-xs mt-1">
-                    Vous pourrez choisir le même plan ou en sélectionner un nouveau.
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Étape 2: Sélection du plan */}
-          {step === 'plan' && (
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="plan">Plan d'abonnement *</Label>
-                <Select value={selectedPlanId} onValueChange={setSelectedPlanId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Sélectionner un plan..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {plansLoading ? (
-                      <SelectItem value="" disabled>Chargement des plans...</SelectItem>
-                    ) : (
-                      plans.map((plan) => (
-                        <SelectItem key={plan.planId} value={plan.planId}>
-                          <div className="flex items-center space-x-2">
-                            <span>{plan.planName}</span>
-                            {plan.isRecommended === 1 && (
-                              <Crown className="h-3 w-3 text-yellow-500" />
-                            )}
-                            <span className="text-sm text-gray-500">
-                              {formatCurrency(plan.monthlyPrice, plan.currency as Currency)}/mois
-                            </span>
-                          </div>
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
+        ) : (
+          <div className="space-y-4">
+            {/* Informations du tenant */}
+            <div className="bg-gray-50 p-3 rounded-lg">
+              <div className="flex items-center space-x-2 text-sm text-gray-600">
+                <Building2 className="h-4 w-4" />
+                <span className="font-medium">{tenantName}</span>
+                <Badge variant="outline" className="text-xs">ID: {tenantId}</Badge>
+                <Badge variant="destructive" className="text-xs">SUSPENDU</Badge>
               </div>
-
-              {selectedPlan && (
-                <Card>
-                  <CardContent className="pt-4">
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="font-medium">{selectedPlan.planName}</span>
-                        {selectedPlan.isRecommended === 1 && (
-                          <Badge className="bg-yellow-100 text-yellow-800">
-                            <Crown className="h-3 w-3 mr-1" />
-                            Recommandé
-                          </Badge>
-                        )}
-                      </div>
-                      <p className="text-sm text-gray-600">{selectedPlan.description}</p>
-                      <div className="grid grid-cols-2 gap-4 text-sm mt-3">
-                        <div>
-                          <span className="text-gray-500">Prix mensuel :</span>
-                          <div className="font-medium">
-                            {formatCurrency(selectedPlan.monthlyPrice, selectedPlan.currency as Currency)}
-                          </div>
-                        </div>
-                        <div>
-                          <span className="text-gray-500">Utilisateurs max :</span>
-                          <div className="font-medium">{selectedPlan.maxUsers}</div>
-                        </div>
-                        <div>
-                          <span className="text-gray-500">Stockage DB :</span>
-                          <div className="font-medium">{selectedPlan.maxDatabaseStorageMB} MB</div>
-                        </div>
-                        <div>
-                          <span className="text-gray-500">Stockage S3 :</span>
-                          <div className="font-medium">{selectedPlan.maxS3StorageMB} MB</div>
-                        </div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
             </div>
-          )}
 
-          {/* Étape 3: Confirmation finale */}
-          {step === 'final' && (
-            <div className="space-y-4">
-              <div className="bg-green-50 p-3 rounded-lg">
-                <div className="flex items-center space-x-2">
-                  <CheckCircle className="h-4 w-4 text-green-600" />
-                  <span className="font-medium text-green-800">Plan sélectionné :</span>
-                </div>
-                <p className="text-green-700 mt-1">{selectedPlan?.planName}</p>
-                <p className="text-green-600 text-sm mt-1">
-                  {formatCurrency(selectedPlan?.monthlyPrice || 0, (selectedPlan?.currency as Currency) || 'EUR')}/mois
-                </p>
-              </div>
-
-              <div>
-                <Label htmlFor="notes">Notes de réactivation (optionnel)</Label>
-                <Textarea
-                  id="notes"
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Ajoutez des notes sur cette réactivation..."
-                  maxLength={300}
-                  rows={3}
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  {notes.length}/300 caractères
-                </p>
-              </div>
-
-              <Alert>
-                <Play className="h-4 w-4" />
-                <AlertDescription>
-                  Le tenant sera réactivé immédiatement avec le plan sélectionné.
-                  La facturation reprendra selon les conditions du plan.
-                </AlertDescription>
-              </Alert>
-            </div>
-          )}
-
-          {error && (
-            <Alert variant="destructive">
-              <AlertTriangle className="h-4 w-4" />
-              <AlertDescription>{error}</AlertDescription>
+            {/* Informations sur la réactivation */}
+            <Alert>
+              <CheckCircle className="h-4 w-4" />
+              <AlertDescription>
+                <strong>La réactivation permettra :</strong>
+                <ul className="mt-2 text-sm list-disc list-inside space-y-1">
+                  <li>Restaurer l'accès immédiatement</li>
+                  <li>Permettre les connexions des utilisateurs</li>
+                  <li>Rendre les données à nouveau accessibles</li>
+                  <li>Reprendre le fonctionnement normal</li>
+                </ul>
+              </AlertDescription>
             </Alert>
-          )}
-        </div>
 
-        <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={handleClose}
-            disabled={loading}
-          >
-            Annuler
-          </Button>
-          
-          {step === 'confirm' && (
-            <Button
-              onClick={handleContinue}
-              disabled={loading}
-              className="bg-green-600 hover:bg-green-700"
-            >
-              <Play className="h-4 w-4 mr-2" />
-              Continuer
+            {/* Champ raison */}
+            <div className="space-y-2">
+              <Label htmlFor="reason">
+                Raison de la réactivation *
+              </Label>
+              <Textarea
+                id="reason"
+                placeholder="Décrivez la raison de la réactivation du tenant..."
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                rows={3}
+                disabled={loading}
+                className="resize-none"
+              />
+              <p className="text-xs text-gray-500">
+                Cette information sera enregistrée dans l'historique du tenant.
+              </p>
+            </div>
+
+            {/* Message d'erreur */}
+            {error && (
+              <Alert variant="destructive">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+          </div>
+        )}
+
+        {!success && (
+          <DialogFooter className="flex justify-between">
+            <Button variant="outline" onClick={handleClose} disabled={loading}>
+              Annuler
             </Button>
-          )}
-          
-          {step === 'plan' && (
-            <Button
-              onClick={handlePlanNext}
-              disabled={loading || !selectedPlanId}
-            >
-              Suivant
-            </Button>
-          )}
-          
-          {step === 'final' && (
-            <Button
-              onClick={handleFinalReactivate}
-              disabled={loading}
+            
+            <Button 
+              onClick={handleSubmit} 
+              disabled={loading || !reason.trim()}
               className="bg-green-600 hover:bg-green-700"
             >
               {loading ? (
                 <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
                   Réactivation...
                 </>
               ) : (
@@ -311,8 +167,8 @@ export function ReactivateTenantModal({
                 </>
               )}
             </Button>
-          )}
-        </DialogFooter>
+          </DialogFooter>
+        )}
       </DialogContent>
     </Dialog>
   )
