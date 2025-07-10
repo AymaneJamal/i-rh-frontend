@@ -24,15 +24,24 @@ import {
   Eye,
   DollarSign,
   Calendar,
-  CreditCard
+  CreditCard,
+  Zap,
+  Plus
 } from "lucide-react"
+
+import { ExtendPlanModal } from "@/components/modals/extend-plan-modal"
+import { Clock } from "lucide-react"
 
 interface InvoicesSectionProps {
   invoices: TenantInvoice[]
   loading: boolean
   error: string | null
   onRefresh: () => void
+  onExtendPlan?: () => void
+  tenant?: any
 }
+
+
 
 // Helper function pour éviter les erreurs de type Currency
 const formatPrice = (amount: number, currency: string | null): string => {
@@ -57,6 +66,7 @@ const getStatusColor = (status: string) => {
 }
 
 const getPaymentStatusColor = (paymentStatus: string) => {
+  if (!paymentStatus) return 'bg-gray-100 text-gray-800' // Gérer le cas null
   switch (paymentStatus.toUpperCase()) {
     case 'PAID':
       return 'bg-green-100 text-green-800'
@@ -75,23 +85,40 @@ export function InvoicesSection({
   invoices, 
   loading, 
   error, 
-  onRefresh 
+  onRefresh,
+  onExtendPlan,
+  tenant
 }: InvoicesSectionProps) {
   
   if (error) {
     return (
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between">
             <CardTitle className="flex items-center">
-              <FileText className="h-5 w-5 mr-2" />
-              Liste des Factures
+                <FileText className="h-5 w-5 mr-2" />
+                Facturation ({invoices.length})
             </CardTitle>
-            <Button variant="outline" size="sm" onClick={onRefresh}>
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Actualiser
-            </Button>
-          </div>
+            <div className="flex items-center space-x-2">
+                {/* Bouton Étendre Plan - seulement si tenant a un plan */}
+                {onExtendPlan && tenant?.plan?.id && (
+                    <Button 
+                        variant="default" 
+                        size="sm" 
+                        onClick={onExtendPlan}
+                        className="bg-green-600 hover:bg-green-700"
+                    >
+                        <Zap className="h-4 w-4 mr-2" />
+                        Étendre Plan
+                    </Button>
+                )}
+        
+                <Button variant="outline" size="sm" onClick={onRefresh} disabled={loading}>
+                <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                Actualiser
+                </Button>
+            </div>
+        </div>
         </CardHeader>
         <CardContent>
           <Alert variant="destructive">
@@ -129,10 +156,20 @@ export function InvoicesSection({
             <span>Chargement des factures...</span>
           </div>
         ) : invoices.length === 0 ? (
-          <div className="text-center py-8">
-            <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <p className="text-gray-500">Aucune facture trouvée</p>
-          </div>
+            <div className="text-center py-8">
+                <FileText className="h-12 w-12 text-gray-400 mx-auto mb-3" />
+                <p className="text-gray-500 mb-4">Aucune facture trouvée</p>
+                {onExtendPlan && tenant?.plan?.id && (
+                <Button 
+                    variant="outline" 
+                    onClick={onExtendPlan}
+                    className="border-green-600 text-green-600 hover:bg-green-50"
+                >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Créer une extension de plan
+                </Button>
+                )}
+            </div>
         ) : (
           <div className="space-y-4">
             {/* Summary Cards */}
@@ -185,7 +222,6 @@ export function InvoicesSection({
                 </Card>
               </div>
             )}
-
             {/* Invoices Table */}
             <div className="border rounded-lg">
               <Table>
@@ -310,8 +346,29 @@ export function InvoicesSection({
                     </TableRow>
                   ))}
                 </TableBody>
-              </Table>
+              </Table>  
             </div>
+            {/* Invoices Table */}
+              {/* Actions supplémentaires */}
+                {onExtendPlan && tenant?.plan?.id && (
+                <div className="pt-4 border-t">
+                    <div className="flex items-center justify-between">
+                    <div>
+                        <h4 className="font-medium">Actions rapides</h4>
+                        <p className="text-sm text-gray-600">
+                        Gérez la facturation de ce tenant
+                        </p>
+                    </div>
+                    <Button 
+                        onClick={onExtendPlan}
+                        className="bg-green-600 hover:bg-green-700"
+                    >
+                        <Zap className="h-4 w-4 mr-2" />
+                        Étendre Plan
+                    </Button>
+                    </div>
+                </div>
+                )}
           </div>
         )}
       </CardContent>

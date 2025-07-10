@@ -47,6 +47,52 @@ export const tenantSubscriptionApi = {
   
   return response.data
 },
+
+
+
+extendSubscription: async (
+  tenantId: string,
+  request: AssignPlanRequest,
+  receiptFile?: File
+) => {
+  console.log("🔍 API extendSubscription called with:", {
+    tenantId,
+    planId: request.planId,
+    invoiceType: request.invoiceType,
+    billingMethod: request.billingMethod,
+    fileName: receiptFile?.name,
+    fileSize: receiptFile?.size
+  })
+
+  const formData = new FormData()
+  
+  // Ajouter le JSON request en tant que string
+  formData.append('request', JSON.stringify(request))
+  
+  // Ajouter le fichier si présent
+  if (receiptFile) {
+    formData.append('receipt', receiptFile)
+  }
+
+  // Debug FormData
+  console.log("🔍 FormData contents for extend:")
+  for (let [key, value] of formData.entries()) {
+    console.log(`  ${key}:`, value instanceof File ? `File: ${value.name}` : value)
+  }
+
+  const response = await apiClient.post(
+    `/api/subscriptions/tenants/${tenantId}/extend-subscription`,
+    formData,
+    { 
+      includeUserEmail: true,
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    }
+  )
+  
+  return response.data
+},
     
 
   changePlan: async (
@@ -172,5 +218,52 @@ export const tenantSubscriptionApi = {
     )
     
     return response.data
+  } , 
+
+  // NOUVELLE FONCTION: Extend Plan
+  extendPlan: async (
+    request: AssignPlanRequest,
+    receiptFile?: File
+  ) => {
+    console.log("🔍 API extendPlan called with:", {
+      tenantId: request.tenantId,
+      planId: request.planId,
+      invoiceType: request.invoiceType,
+      billingMethod: request.billingMethod,
+      fileName: receiptFile?.name,
+      fileSize: receiptFile?.size
+    })
+
+    const formData = new FormData()
+    
+    // Ajouter le JSON request en tant que string
+    formData.append('request', JSON.stringify(request))
+    
+    // Ajouter le fichier si présent
+    if (receiptFile) {
+      formData.append('receipt', receiptFile)
+    }
+
+    // Debug FormData
+    console.log("🔍 FormData contents for extend:")
+    for (let [key, value] of formData.entries()) {
+      console.log(`  ${key}:`, value instanceof File ? `File: ${value.name}` : value)
+    }
+
+    const response = await apiClient.post(
+      `/api/subscriptions/tenants/${request.tenantId}/extend-subscription`,
+      formData,
+      { 
+        includeUserEmail: true,
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      }
+    )
+    
+    return response.data
   }
+
+
+
 }

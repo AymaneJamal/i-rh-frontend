@@ -68,7 +68,7 @@ export const tenantEmergencyApi = {
       
       const queryParams = apiClient.buildQueryString({
         reason,
-        userIds: userIds.join(',') // Convert array to comma-separated string
+        userIds: JSON.stringify(userIds) // Convert array to JSON string
       })
 
       const response = await apiClient.postWithUserEmail(
@@ -96,7 +96,7 @@ export const tenantEmergencyApi = {
       
       const queryParams = apiClient.buildQueryString({
         reason,
-        userIds: userIds.join(',') // Convert array to comma-separated string
+        userIds: JSON.stringify(userIds) // Convert array to JSON string
       })
 
       const response = await apiClient.postWithUserEmail(

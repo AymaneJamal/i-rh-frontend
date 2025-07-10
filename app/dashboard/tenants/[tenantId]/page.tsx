@@ -28,6 +28,7 @@ import { useTenantHistory } from "@/hooks/use-tenant-history"
 
 import { EmergencyAccessModal } from "@/components/modals/emergency-access-modal"
 import { ReadOnlyModal } from "@/components/modals/read-only-modal"
+import { ExtendPlanModal } from "@/components/modals/extend-plan-modal"
 
 import {
   ArrowLeft,
@@ -60,25 +61,208 @@ import {
   Eye
 } from "lucide-react"
 
+/**
+ * Vérifie si une action peut être effectuée (cooldown de 5 minutes)
+ */
+/**
+ * Vérifie si une action peut être effectuée (cooldown de 5 minutes)
+ */
+/**
+ * Convertit un timestamp de format mixte en millisecondes
+ */
+function parseTimestamp(timestamp: string | number): number {
+  // Si c'est déjà un number, le retourner
+  if (typeof timestamp === 'number') {
+    return timestamp
+  }
+
+  // Si c'est une string
+  if (typeof timestamp === 'string') {
+    // Vérifier si c'est un format ISO (contient des lettres)
+    if (timestamp.includes('T') || timestamp.includes('Z')) {
+      return new Date(timestamp).getTime()
+    }
+    
+    // Sinon, c'est un timestamp numérique en string
+    return parseInt(timestamp, 10)
+  }
+
+  // Fallback
+  return Date.now()
+}
+
+/**
+ * Vérifie si une action peut être effectuée (cooldown de 5 minutes)
+ */
+function canPerformAction(statusHistory: any[]): { canAct: boolean; remainingTime: number } {
+  console.log("🔍 Checking action cooldown with history:", statusHistory)
+  
+  if (!statusHistory || statusHistory.length === 0) {
+    console.log("✅ No status history - allowing action")
+    return { canAct: true, remainingTime: 0 }
+  }
+
+  // Trouver le dernier changement de statut RÉEL (previousStatus différent de newStatus)
+  const realStatusChanges = statusHistory.filter(item => {
+    const hasRealChange = item.previousStatus !== item.newStatus
+    console.log("📊 History item:", {
+      previousStatus: item.previousStatus,
+      newStatus: item.newStatus,
+      timestamp: item.timestamp,
+      reason: item.reason,
+      changedBy: item.changedBy,
+      isRealChange: hasRealChange
+    })
+    return hasRealChange
+  })
+
+  console.log("🔄 Real status changes found:", realStatusChanges.length)
+
+  if (realStatusChanges.length === 0) {
+    console.log("✅ No real status changes found - allowing action")
+    return { canAct: true, remainingTime: 0 }
+  }
+
+  // Trier par timestamp décroissant pour obtenir le plus récent
+  const lastRealChange = realStatusChanges.sort((a, b) => {
+    const timestampA = parseTimestamp(a.timestamp)
+    const timestampB = parseTimestamp(b.timestamp)
+    return timestampB - timestampA
+  })[0]
+
+  console.log("🕐 Last real change:", lastRealChange)
+
+  // Convertir le timestamp en millisecondes
+  const lastChangeTime = parseTimestamp(lastRealChange.timestamp)
+  const currentTime = Date.now()
+  const cooldownPeriod = 5 * 60 * 1000 // 5 minutes en millisecondes
+  const timeSinceLastChange = currentTime - lastChangeTime
+  const remainingTime = Math.max(0, cooldownPeriod - timeSinceLastChange)
+
+  console.log("⏰ Cooldown calculation:", {
+    lastChangeTime: new Date(lastChangeTime).toISOString(),
+    currentTime: new Date(currentTime).toISOString(),
+    timeSinceLastChange: Math.floor(timeSinceLastChange / 1000) + " seconds",
+    cooldownPeriod: cooldownPeriod / 1000 + " seconds",
+    remainingTime: Math.floor(remainingTime / 1000) + " seconds",
+    canAct: timeSinceLastChange >= cooldownPeriod
+  })
+
+  return {
+    canAct: timeSinceLastChange >= cooldownPeriod,
+    remainingTime
+  }
+}
+
+/**
+ * Détermine quels boutons afficher selon le statut
+ */
+function getAvailableActions(status: string): {
+  showAssignPlan: boolean
+  showSuspend: boolean
+  showReactivate: boolean
+  showEmergency: boolean
+  showReadOnly: boolean
+} {
+  const normalizedStatus = status?.toUpperCase()
+  console.log("🎯 Determining actions for status:", normalizedStatus)
+
+  switch (normalizedStatus) {
+    case 'CREATED':
+      return {
+        showAssignPlan: true,
+        showSuspend: true,
+        showReactivate: false,
+        showEmergency: false,
+        showReadOnly: false
+      }
+
+    case 'ACTIVE':
+      return {
+        showAssignPlan: false,
+        showSuspend: true,
+        showReactivate: false,
+        showEmergency: true,
+        showReadOnly: true
+      }
+
+    case 'SUSPENDED':
+    case 'EMERGENCY_ACCESS':
+    case 'READ_ONLY':
+      return {
+        showAssignPlan: false,
+        showSuspend: true,
+        showReactivate: true,
+        showEmergency: false,
+        showReadOnly: false
+      }
+
+    default:
+      return {
+        showAssignPlan: false,
+        showSuspend: false,
+        showReactivate: false,
+        showEmergency: false,
+        showReadOnly: false
+      }
+  }
+}
+
+
 interface TenantActionCardProps {
   tenant: any
+  statusHistory: any[]
+  onAssignPlan: () => void
   onSuspend: () => void
   onReactivate: () => void
-  onEmergencyAccess: () => void  // NOUVEAU
-  onReadOnlyAccess: () => void   // NOUVEAU
+  onEmergencyAccess: () => void
+  onReadOnlyAccess: () => void
   loading: boolean
 }
 
 function TenantActionCard({ 
   tenant, 
+  statusHistory,
+  onAssignPlan,
   onSuspend, 
   onReactivate, 
-  onEmergencyAccess,  // NOUVEAU
-  onReadOnlyAccess,   // NOUVEAU
+  onEmergencyAccess,
+  onReadOnlyAccess,
   loading 
 }: TenantActionCardProps) {
-  const isActive = tenant?.status === "ACTIVE"
-  const isSuspended = tenant?.status === "SUSPENDED"
+  const [currentTime, setCurrentTime] = useState(Date.now())
+
+  // Actualiser le temps toutes les secondes pour le cooldown
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(Date.now())
+    }, 1000)
+
+    return () => clearInterval(interval)
+  }, [])
+
+  // Vérifier si une action peut être effectuée
+  const { canAct, remainingTime } = canPerformAction(statusHistory)
+  
+  // Déterminer quels boutons afficher
+  const actions = getAvailableActions(tenant?.status)
+  
+  // Formater le temps restant
+  const formatRemainingTime = (ms: number): string => {
+    if (ms <= 0 || isNaN(ms)) return "0:00"
+    
+    const minutes = Math.floor(ms / 60000)
+    const seconds = Math.floor((ms % 60000) / 1000)
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`
+  }
+
+  console.log("🎨 Rendering TenantActionCard:", {
+    tenantStatus: tenant?.status,
+    canAct,
+    remainingTime: formatRemainingTime(remainingTime),
+    actions,
+    historyCount: statusHistory?.length || 0
+  })
 
   return (
     <Card>
@@ -89,47 +273,102 @@ function TenantActionCard({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        {/* BOUTONS POUR LES NOUVELLES ACTIONS */}
-        <Button 
-          onClick={onEmergencyAccess} 
-          disabled={loading}
-          className="w-full bg-red-600 hover:bg-red-700"
-        >
-          <AlertTriangle className="h-4 w-4 mr-2" />
-          Accès d'Urgence
-        </Button>
-        
-        <Button 
-          onClick={onReadOnlyAccess} 
-          disabled={loading}
-          className="w-full bg-blue-600 hover:bg-blue-700"
-        >
-          <Eye className="h-4 w-4 mr-2" />
-          Mode Lecture Seule
-        </Button>
-        
-        {/* BOUTONS EXISTANTS */}
-        {isActive ? (
+        {/* Alerte de cooldown */}
+        {!canAct && remainingTime > 0 && (
+          <Alert>
+            <Clock className="h-4 w-4" />
+            <AlertDescription>
+              Actions temporairement bloquées. Temps restant: {formatRemainingTime(remainingTime)}
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {/* Status actuel */}
+        <div className="flex items-center justify-between p-2 bg-gray-50 rounded">
+          <span className="text-sm font-medium">Statut actuel:</span>
+          {getStatusBadge(tenant?.status || 'UNKNOWN')}
+        </div>
+
+        {/* Bouton Attribuer un Plan */}
+        {actions.showAssignPlan && (
+          <Button 
+            onClick={onAssignPlan}
+            disabled={loading || !canAct}
+            className="w-full bg-green-600 hover:bg-green-700"
+          >
+            <CreditCard className="h-4 w-4 mr-2" />
+            Attribuer un Plan
+          </Button>
+        )}
+
+        {/* Bouton Suspendre */}
+        {actions.showSuspend && (
           <Button 
             variant="destructive" 
             onClick={onSuspend} 
-            disabled={loading}
+            disabled={loading || !canAct}
             className="w-full"
           >
             <Pause className="h-4 w-4 mr-2" />
             Suspendre
           </Button>
-        ) : isSuspended ? (
+        )}
+
+        {/* Bouton Réactiver */}
+        {actions.showReactivate && (
           <Button 
             variant="default" 
             onClick={onReactivate} 
-            disabled={loading}
-            className="w-full"
+            disabled={loading || !canAct}
+            className="w-full bg-blue-600 hover:bg-blue-700"
           >
             <Play className="h-4 w-4 mr-2" />
             Réactiver
           </Button>
-        ) : null}
+        )}
+
+        {/* Bouton Accès d'Urgence */}
+        {actions.showEmergency && (
+          <Button 
+            onClick={onEmergencyAccess} 
+            disabled={loading || !canAct}
+            className="w-full bg-red-600 hover:bg-red-700"
+          >
+            <AlertTriangle className="h-4 w-4 mr-2" />
+            Accès d'Urgence
+          </Button>
+        )}
+
+        {/* Bouton Mode Lecture Seule */}
+        {actions.showReadOnly && (
+          <Button 
+            onClick={onReadOnlyAccess} 
+            disabled={loading || !canAct}
+            className="w-full bg-orange-600 hover:bg-orange-700"
+          >
+            <Eye className="h-4 w-4 mr-2" />
+            Mode Lecture Seule
+          </Button>
+        )}
+
+        {/* Message si aucune action disponible */}
+        {!actions.showAssignPlan && !actions.showSuspend && !actions.showReactivate && 
+         !actions.showEmergency && !actions.showReadOnly && (
+          <div className="text-center py-4">
+            <p className="text-sm text-gray-500">Aucune action disponible pour ce statut</p>
+          </div>
+        )}
+
+        {/* Debug info en développement */}
+        {process.env.NODE_ENV === 'development' && (
+          <div className="text-xs text-gray-400 mt-2 p-2 bg-gray-50 rounded">
+            <div>Can Act: {canAct ? 'Yes' : 'No'}</div>
+            <div>Remaining: {formatRemainingTime(remainingTime)}</div>
+            <div>Status: {tenant?.status}</div>
+            <div>History items: {statusHistory?.length || 0}</div>
+            <div>Last real change: {statusHistory?.filter(item => item.previousStatus !== item.newStatus)?.[0]?.timestamp || 'None'}</div>
+          </div>
+        )}
       </CardContent>
     </Card>
   )
@@ -215,6 +454,8 @@ export default function TenantDetailPage() {
   const [showEmergencyAccessModal, setShowEmergencyAccessModal] = useState(false)
   const [showReadOnlyModal, setShowReadOnlyModal] = useState(false)
 
+  const [showExtendPlanModal, setShowExtendPlanModal] = useState(false)
+
 
   const [actionLoading, setActionLoading] = useState(false)
 
@@ -235,12 +476,25 @@ export default function TenantDetailPage() {
 
   const handleEmergencyAccessSuccess = () => {
     refresh()
+    refreshHistory()
     setShowEmergencyAccessModal(false)
   }
 
   const handleReadOnlySuccess = () => {
     refresh()
+    refreshHistory()
     setShowReadOnlyModal(false)
+  }
+
+
+  const handleExtendPlan = () => {
+  setShowExtendPlanModal(true)
+  }
+
+  const handleExtendPlanSuccess = () => {
+    refresh()
+    refreshHistory()
+    setShowExtendPlanModal(false)
   }
 
   const handleSuspendTenant = async (reason: string) => {
@@ -249,6 +503,7 @@ export default function TenantDetailPage() {
       const response = await tenantSubscriptionApi.suspendTenant(tenantId, reason)
       
       if (response.success) {
+        refreshHistory()
         refresh()
         setShowSuspendModal(false)
       }
@@ -266,6 +521,7 @@ export default function TenantDetailPage() {
       
       if (response.success) {
         refresh()
+        refreshHistory()
         setShowReactivateModal(false)
       }
     } catch (err: any) {
@@ -545,19 +801,76 @@ export default function TenantDetailPage() {
                       </div>
                     </CardContent>
                   </Card>
+                                <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center">
+                    <CreditCard className="h-5 w-5 mr-2" />
+                    Détails de l'Abonnement
+                    {statusLoading && <RefreshCw className="h-4 w-4 ml-2 animate-spin" />}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {tenant.plan ? (
+                    <div className="space-y-6">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div className="bg-blue-50 p-4 rounded-lg">
+                          <p className="text-sm font-medium text-blue-600">Plan actuel</p>
+                          <p className="text-xl font-bold text-blue-900">{tenant.plan.name}</p>
+                        </div>
+                        <div className="bg-green-50 p-4 rounded-lg">
+                          <p className="text-sm font-medium text-green-600">Statut</p>
+                          <Badge variant={subscriptionStatus === "ACTIVE" ? "default" : "secondary"} className="text-sm">
+                            {subscriptionStatus || "Inconnu"}
+                          </Badge>
+                        </div>
+                        <div className="bg-gray-50 p-4 rounded-lg">
+                          <p className="text-sm font-medium text-gray-600">Devise</p>
+                          <p className="text-xl font-bold text-gray-900">{tenant.currency || 'MAD'}</p>
+                        </div>
+                      </div>
+                      
+                      <div>
+                        <p className="text-sm font-medium text-gray-500">ID du plan</p>
+                        <p className="text-sm font-mono bg-gray-100 px-3 py-2 rounded mt-1">{tenant.plan.id}</p>
+                      </div>
+
+                      {tenant.isInGracePeriod === 1 && (
+                        <Alert variant="destructive">
+                          <AlertCircle className="h-4 w-4" />
+                          <AlertDescription>
+                            Ce tenant est en période de grâce.
+                          </AlertDescription>
+                        </Alert>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-center py-12">
+                      <CreditCard className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+                      <h3 className="text-lg font-medium text-gray-900 mb-2">Aucun plan attribué</h3>
+                      <p className="text-gray-500 mb-6">Ce tenant n'a pas encore de plan d'abonnement.</p>
+                      <Button onClick={handleAssignPlan}>
+                        <CreditCard className="h-4 w-4 mr-2" />
+                        Attribuer un Plan
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
                 </div>
 
                 {/* Sidebar */}
                 <div className="space-y-6">
                   {/* Actions */}
                   <TenantActionCard
-                    tenant={tenant}
-                    onSuspend={() => setShowSuspendModal(true)}
-                    onReactivate={() => setShowReactivateModal(true)}
-                    onEmergencyAccess={handleEmergencyAccess}
-                    onReadOnlyAccess={handleReadOnlyAccess}
-                    loading={actionLoading}
-                  />
+                      tenant={tenant}
+                      statusHistory={statusHistory}
+                      onAssignPlan={handleAssignPlan}
+                      onSuspend={() => setShowSuspendModal(true)}
+                      onReactivate={() => setShowReactivateModal(true)}
+                      onEmergencyAccess={handleEmergencyAccess}
+                      onReadOnlyAccess={handleReadOnlyAccess}
+                      loading={actionLoading}
+                    />
 
                   {/* Administrateur */}
                   {adminUser && (
@@ -598,6 +911,7 @@ export default function TenantDetailPage() {
                       </CardContent>
                     </Card>
                   )}
+                  
                 </div>
               </div>
             </TabsContent>
@@ -766,11 +1080,13 @@ export default function TenantDetailPage() {
            {/* Onglet Facturation */}
            <TabsContent value="billing" className="space-y-6">
              <InvoicesSection 
-               invoices={historyInvoices}
-               loading={historyInvoicesLoading}
-               error={historyInvoicesError}
-               onRefresh={refreshHistoryInvoices}
-             />
+              invoices={historyInvoices}
+              loading={historyInvoicesLoading}
+              error={historyInvoicesError}
+              onRefresh={refreshHistoryInvoices}
+              onExtendPlan={handleExtendPlan}
+              tenant={tenant}
+            />
            </TabsContent>
 
            {/* Onglet Historique */}
@@ -828,7 +1144,16 @@ export default function TenantDetailPage() {
         tenantName={tenant.name}
         onSuccess={handleReadOnlySuccess}
       />
-      
+
+      <ExtendPlanModal
+        isOpen={showExtendPlanModal}
+        onClose={() => setShowExtendPlanModal(false)}
+        tenantId={tenantId}
+        tenantName={tenant?.name || ""}
+        existingPlan={tenant?.plan}
+        onPlanExtended={handleExtendPlanSuccess}
+      />
+
      </div>
    </ProtectedRoute>
  )
