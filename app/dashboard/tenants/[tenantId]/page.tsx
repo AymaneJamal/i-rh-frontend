@@ -25,6 +25,8 @@ import { Currency } from "@/lib/constants"
 import { StatusHistorySection } from "@/components/tenant/status-history-section"
 import { InvoicesSection } from "@/components/tenant/invoices-section"
 import { useTenantHistory } from "@/hooks/use-tenant-history"
+// Ajoutez cette ligne avec les autres imports
+import { TenantHelpersSection } from "@/components/tenant/tenant-helpers-section"
 
 import { EmergencyAccessModal } from "@/components/modals/emergency-access-modal"
 import { ReadOnlyModal } from "@/components/modals/read-only-modal"
@@ -63,12 +65,6 @@ import {
 
 /**
  * Vérifie si une action peut être effectuée (cooldown de 5 minutes)
- */
-/**
- * Vérifie si une action peut être effectuée (cooldown de 5 minutes)
- */
-/**
- * Convertit un timestamp de format mixte en millisecondes
  */
 function parseTimestamp(timestamp: string | number): number {
   // Si c'est déjà un number, le retourner
@@ -660,9 +656,9 @@ export default function TenantDetailPage() {
                 <Info className="h-4 w-4" />
                 <span>Vue d'ensemble</span>
               </TabsTrigger>
-              <TabsTrigger value="subscription" className="flex items-center space-x-2">
-                <CreditCard className="h-4 w-4" />
-                <span>Abonnement</span>
+              <TabsTrigger value="helpers" className="flex items-center space-x-2">
+                <Users className="h-4 w-4" />
+                <span>Assistants</span>
               </TabsTrigger>
               <TabsTrigger value="usage" className="flex items-center space-x-2">
                 <BarChart3 className="h-4 w-4" />
@@ -916,63 +912,10 @@ export default function TenantDetailPage() {
               </div>
             </TabsContent>
 
-            {/* Onglet Abonnement */}
-            <TabsContent value="subscription" className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center">
-                    <CreditCard className="h-5 w-5 mr-2" />
-                    Détails de l'Abonnement
-                    {statusLoading && <RefreshCw className="h-4 w-4 ml-2 animate-spin" />}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {tenant.plan ? (
-                    <div className="space-y-6">
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <div className="bg-blue-50 p-4 rounded-lg">
-                          <p className="text-sm font-medium text-blue-600">Plan actuel</p>
-                          <p className="text-xl font-bold text-blue-900">{tenant.plan.name}</p>
-                        </div>
-                        <div className="bg-green-50 p-4 rounded-lg">
-                          <p className="text-sm font-medium text-green-600">Statut</p>
-                          <Badge variant={subscriptionStatus === "ACTIVE" ? "default" : "secondary"} className="text-sm">
-                            {subscriptionStatus || "Inconnu"}
-                          </Badge>
-                        </div>
-                        <div className="bg-gray-50 p-4 rounded-lg">
-                          <p className="text-sm font-medium text-gray-600">Devise</p>
-                          <p className="text-xl font-bold text-gray-900">{tenant.currency || 'MAD'}</p>
-                        </div>
-                      </div>
-                      
-                      <div>
-                        <p className="text-sm font-medium text-gray-500">ID du plan</p>
-                        <p className="text-sm font-mono bg-gray-100 px-3 py-2 rounded mt-1">{tenant.plan.id}</p>
-                      </div>
 
-                      {tenant.isInGracePeriod === 1 && (
-                        <Alert variant="destructive">
-                          <AlertCircle className="h-4 w-4" />
-                          <AlertDescription>
-                            Ce tenant est en période de grâce.
-                          </AlertDescription>
-                        </Alert>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="text-center py-12">
-                      <CreditCard className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-                      <h3 className="text-lg font-medium text-gray-900 mb-2">Aucun plan attribué</h3>
-                      <p className="text-gray-500 mb-6">Ce tenant n'a pas encore de plan d'abonnement.</p>
-                      <Button onClick={handleAssignPlan}>
-                        <CreditCard className="h-4 w-4 mr-2" />
-                        Attribuer un Plan
-                      </Button>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+            {/* Onglet Assistants du Locataire */}
+            <TabsContent value="helpers" className="space-y-6">
+              <TenantHelpersSection tenantId={params.tenantId as string} />
             </TabsContent>
 
             {/* Onglet Utilisation */}
