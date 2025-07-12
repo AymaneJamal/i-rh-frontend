@@ -2,6 +2,54 @@
 import { useState, useCallback, useEffect } from "react"
 import { useAppSelector } from "@/lib/hooks"
 import { tenantHelpersApi, TenantHelpersSummaryResponse, MyTenantHelperResponse, SuperAdminTenantHelpersResponse, TenantHelperSummary } from "@/lib/api/tenant-helpers"
+// Re-export pour utilisation dans les composants
+export type { TenantHelperSummary } from "@/lib/api/tenant-helpers"
+
+
+// AJOUTER après les imports existants
+export interface HelperFilters {
+  search: string
+  status: 'all' | 'active' | 'pending' | 'emergency_access' | 'read_only' | 'suspended' | 'deleted'
+  scope: 'all' | 'my_helpers'
+}
+
+// Fonction pour filtrer les helpers côté client
+const filterHelpers = (helpers: TenantHelperSummary[], filters: HelperFilters): TenantHelperSummary[] => {
+  if (!helpers) return []
+  
+  return helpers.filter(helperItem => {
+    const helper = helperItem.helper
+    
+    // Filtre par recherche (nom, prénom, email)
+    if (filters.search) {
+      const searchTerm = filters.search.toLowerCase()
+      const fullName = `${helper.firstName} ${helper.lastName}`.toLowerCase()
+      const email = helper.email.toLowerCase()
+      
+      if (!fullName.includes(searchTerm) && !email.includes(searchTerm)) {
+        return false
+      }
+    }
+    
+    // Filtre par statut
+
+    // Filtre par statut
+    if (filters.status !== 'all') {
+    const helperStatus = helper.status?.toUpperCase()
+    const filterStatus = filters.status.toUpperCase()
+    
+    if (helperStatus !== filterStatus) {
+        return false
+    }
+    }
+    
+    return true
+  })
+}
+
+
+
+
 
 export const useTenantHelpers = (tenantId: string) => {
   const [loading, setLoading] = useState(false)
@@ -10,59 +58,150 @@ export const useTenantHelpers = (tenantId: string) => {
   const [myHelperDetails, setMyHelperDetails] = useState<MyTenantHelperResponse | null>(null)
   const [superAdminHelpers, setSuperAdminHelpers] = useState<SuperAdminTenantHelpersResponse | null>(null)
   
+  
   const { user } = useAppSelector((state) => state.auth)
+
+    // États pour les filtres
+    const [filters, setFilters] = useState<HelperFilters>({
+    search: '',
+    status: 'active',
+    scope: 'all'
+    })
+    const [myHelperOnly, setMyHelperOnly] = useState<TenantHelperSummary[]>([])
   
   const canViewHelperDetails = useCallback((helperId?: string) => {
-    if (!user || !helpersSummary || !helperId) return false
+  if (!user || !helperId) return false
+  
+  // ADMIN_PRINCIPAL a TOUJOURS accès (sans vérifier helpersSummary)
+  if (user.role === "ADMIN_PRINCIPAL") {
+    return true
+  }
+  
+  // Pour SUPER_ADMIN, vérifier helpersSummary
+  if (!helpersSummary) return false
+  
+  if (user.role === "SUPER_ADMIN") {
+    const helpers = Object.keys(helpersSummary.data)
+      .filter(key => key.startsWith('helper_'))
+      .map(key => helpersSummary.data[key] as TenantHelperSummary)
     
-    if (user.role === "ADMIN_PRINCIPAL") {
-      return true
-    }
+    const targetHelper = helpers.find(h => h.helper.id === helperId)
     
-    if (user.role === "SUPER_ADMIN") {
-      const helpers = Object.keys(helpersSummary.data)
-        .filter(key => key.startsWith('helper_'))
-        .map(key => helpersSummary.data[key] as TenantHelperSummary)
+    if (targetHelper && targetHelper.adminHelper) {
+      const adminHelper = targetHelper.adminHelper as any
       
-      const targetHelper = helpers.find(h => h.helper.id === helperId)
+      if (adminHelper.email === user.email) {
+        return true
+      }
       
-      if (targetHelper && targetHelper.adminHelper) {
-        const adminHelper = targetHelper.adminHelper as any
-        
-        if (adminHelper.email === user.email) {
-          return true
-        }
-        
-        if (adminHelper.isHelperOf && Array.isArray(adminHelper.isHelperOf)) {
-          return adminHelper.isHelperOf.some((helperRef: any) => 
-            helperRef.tenantId === tenantId && 
-            helperRef.tenantHelperId === helperId
-          )
-        }
+      if (adminHelper.isHelperOf && Array.isArray(adminHelper.isHelperOf)) {
+        return adminHelper.isHelperOf.some((helperRef: any) => 
+          helperRef.tenantId === tenantId && 
+          helperRef.tenantHelperId === helperId
+        )
       }
     }
-    
-    return false
-  }, [user, helpersSummary, tenantId])
+  }
+  
+  return false
+}, [user, helpersSummary, tenantId])
 
-  const hasAnyAccess = useCallback(() => {
-    return canViewHelperDetails()
-  }, [canViewHelperDetails])
+const hasAnyAccess = useCallback(() => {
+  if (!user) return false
+  
+  // ADMIN_PRINCIPAL a toujours accès à tout
+  if (user.role === "ADMIN_PRINCIPAL") {
+    return true
+  }
+  
+  // SUPER_ADMIN a accès s'il y a des helpers
+  if (user.role === "SUPER_ADMIN") {
+    return Boolean(helpersSummary?.data && Object.keys(helpersSummary.data).some(key => key.startsWith('helper_')))
+  }
+  
+  return false
+}, [user, helpersSummary])
   
   const helpers = useCallback(() => {
-    if (!helpersSummary?.data) return []
-    
-    const helpersArray: TenantHelperSummary[] = []
-    const data = helpersSummary.data
-    
+  let baseHelpers: TenantHelperSummary[] = []
+  
+ // D'abord, récupérer TOUS les helpers selon le rôle
+if (user?.role === "ADMIN_PRINCIPAL" && superAdminHelpers?.data) {
+  // Pour ADMIN_PRINCIPAL, extraire depuis superAdminHelpers
+  const data = superAdminHelpers.data as any
+  
+  // Vérifier s'il y a des helpers dans la structure
+  if (data.helpers && Array.isArray(data.helpers)) {
+    // Si c'est un array direct
+    baseHelpers = data.helpers.map((helper: any) => ({
+      helper: {
+        id: helper.id,
+        firstName: helper.firstName,
+        lastName: helper.lastName,
+        role: helper.role,
+        userId: helper.id,
+        email: helper.email,
+        status: helper.status
+      },
+      adminHelper: {
+        id: user.id ?? "admin-unknown",
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role,
+        userId: user.id ?? "admin-unknown",
+        email: user.email
+      }
+    }))
+  } else {
+    // Si c'est la structure helper_0, helper_1, etc.
     Object.keys(data).forEach(key => {
       if (key.startsWith('helper_') && typeof data[key] === 'object') {
-        helpersArray.push(data[key] as TenantHelperSummary)
+        const helperData = data[key]
+        if (helperData.helper) {
+          baseHelpers.push({
+            helper: {
+              id: helperData.helper.id || helperData.helper.userId,
+              firstName: helperData.helper.firstName,
+              lastName: helperData.helper.lastName,
+              role: helperData.helper.role,
+              userId: helperData.helper.userId || helperData.helper.id,
+              email: helperData.helper.email,
+              status: helperData.helper.status
+            },
+            adminHelper: helperData.adminHelper || {
+              id: user.id ?? "admin-unknown",
+              firstName: user.firstName,
+              lastName: user.lastName,
+              role: user.role,
+              userId: user.id ?? "admin-unknown",
+              email: user.email
+            }
+          })
+        }
       }
     })
-    
-    return helpersArray
-  }, [helpersSummary])
+  }
+} else if (user?.role === "SUPER_ADMIN" && helpersSummary?.data) {
+  // Pour SUPER_ADMIN, utiliser helpersSummary
+  const data = helpersSummary.data
+  Object.keys(data).forEach(key => {
+    if (key.startsWith('helper_') && typeof data[key] === 'object') {
+      baseHelpers.push(data[key] as TenantHelperSummary)
+    }
+  })
+}
+
+// PUIS filtrer par scope si nécessaire
+if (filters.scope === 'my_helpers' && user) {
+  // Filtrer pour garder seulement les assistants où l'adminHelper.email = user.email
+  baseHelpers = baseHelpers.filter(helperItem => 
+    helperItem.adminHelper.email === user.email
+  )
+}
+  
+  // Appliquer les filtres
+  return filterHelpers(baseHelpers, filters)
+}, [helpersSummary, superAdminHelpers, myHelperOnly, user, filters])
   
   const fetchHelpersSummary = useCallback(async () => {
     if (!tenantId) {
@@ -142,16 +281,129 @@ const fetchSpecificHelperDetails = useCallback(async (helperUserId: string) => {
       console.error("❌ Erreur lors de la récupération des assistants du super admin:", err)
     }
   }, [tenantId, user?.role])
+
+  // Fonction pour récupérer les helpers de l'utilisateur connecté
+const fetchMyHelpers = useCallback(async () => {
+  if (!user || (user.role !== "SUPER_ADMIN" && user.role !== "ADMIN_PRINCIPAL")) return
   
-  const refresh = useCallback(async () => {
-    await fetchHelpersSummary()
+  try {
+    console.log("🔍 Fetching my helpers for tenant:", tenantId)
+    const response = await tenantHelpersApi.getMyTenantHelper(tenantId)
     
-    if (hasAnyAccess()) {
-      if (user?.role === "ADMIN_PRINCIPAL") {
-        await fetchSuperAdminHelpers()
-      }
+    if (response.success && response.data.helper) {
+      const myHelper: TenantHelperSummary = {
+        helper: {
+            id: response.data.helper.id,
+            firstName: response.data.helper.firstName,
+            lastName: response.data.helper.lastName,
+            role: response.data.helper.role,
+            userId: response.data.helper.id,
+            email: response.data.helper.email,
+            status: response.data.helper.status
+        },
+        adminHelper: {
+            id: user.id ?? "admin-unknown",
+            firstName: user.firstName,
+            lastName: user.lastName,
+            role: user.role,
+            userId: user.id ?? "admin-unknown",
+            email: user.email,
+            status : user.status || "ACTIVE" // Assurez-vous que le statut est défini
+        }
+        }
+      setMyHelperOnly([myHelper])
+    } else {
+      setMyHelperOnly([])
     }
-  }, [fetchHelpersSummary, fetchSuperAdminHelpers, hasAnyAccess, user?.role])
+  } catch (err: any) {
+    console.error("❌ Error fetching my helpers:", err)
+    setMyHelperOnly([])
+  }
+}, [tenantId, user])
+  
+const refresh = useCallback(async () => {
+  if (!tenantId || !user) return
+  
+  try {
+    setLoading(true)
+    setError(null)
+
+    console.log("🔄 Refreshing tenant helpers data...")
+    
+    if (user.role === "ADMIN_PRINCIPAL") {
+        await Promise.all([
+            fetchSuperAdminHelpers(),
+            fetchMyHelpers() // ✅ AJOUTER cette ligne
+        ])
+    } else if (user.role === "SUPER_ADMIN") {
+      await Promise.all([
+        fetchHelpersSummary(),
+        fetchMyHelpers()
+      ])
+    }
+    
+    console.log("✅ Tenant helpers data refreshed")
+  } catch (err: any) {
+    console.error("❌ Error refreshing tenant helpers:", err)
+    setError("Erreur lors du rafraîchissement des données")
+  } finally {
+    setLoading(false)
+  }
+}, [tenantId, user, fetchHelpersSummary, fetchSuperAdminHelpers, fetchMyHelpers])
+
+  // Fonction pour suspendre un assistant
+  const suspendHelper = useCallback(async (helperId: string) => {
+    try {
+      setLoading(true)
+      setError(null)
+      
+      console.log("🔒 Suspending helper:", helperId)
+      const response = await tenantHelpersApi.suspendHelper(tenantId, helperId)
+      
+      if (response.success) {
+        console.log("✅ Helper suspended successfully")
+        // Refresh les données après suspension
+        await refresh()
+        return true
+      } else {
+        setError("Échec de la suspension de l'assistant")
+        return false
+      }
+    } catch (err: any) {
+      console.error("❌ Error suspending helper:", err)
+      setError(err.response?.data?.message || err.message || "Erreur lors de la suspension")
+      return false
+    } finally {
+      setLoading(false)
+    }
+  }, [tenantId, refresh])
+
+  // Fonction pour réactiver un assistant
+  const reactivateHelper = useCallback(async (helperId: string) => {
+    try {
+      setLoading(true)
+      setError(null)
+      
+      console.log("🔓 Reactivating helper:", helperId)
+      const response = await tenantHelpersApi.reactivateHelper(tenantId, helperId)
+      
+      if (response.success) {
+        console.log("✅ Helper reactivated successfully")
+        // Refresh les données après réactivation
+        await refresh()
+        return true
+      } else {
+        setError("Échec de la réactivation de l'assistant")
+        return false
+      }
+    } catch (err: any) {
+      console.error("❌ Error reactivating helper:", err)
+      setError(err.response?.data?.message || err.message || "Erreur lors de la réactivation")
+      return false
+    } finally {
+      setLoading(false)
+    }
+  }, [tenantId, refresh])
   
   useEffect(() => {
     refresh()
@@ -212,7 +464,7 @@ const fetchSpecificHelperDetails = useCallback(async (helperUserId: string) => {
     helpersSummary,
     myHelperDetails,
     superAdminHelpers,
-    helpers: helpers(),
+    filteredHelpers: helpers(),
     loading,
     error,
     canViewHelperDetails,
@@ -224,6 +476,10 @@ const fetchSpecificHelperDetails = useCallback(async (helperUserId: string) => {
     fetchSpecificHelperDetails,
     fetchSuperAdminHelpers,
     resetHelperPassword,
-    decodePassword
+    decodePassword,
+    suspendHelper,
+    reactivateHelper,
+    filters,
+    setFilters,
   }
 }

@@ -1,7 +1,7 @@
 // components/tenant/tenant-helpers-section.tsx
 "use client"
 
-import { useState } from "react"
+import { useState , useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -9,10 +9,12 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Separator } from "@/components/ui/separator"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { useTenantHelpers } from "@/hooks/use-tenant-helpers"
+import { TenantHelpersFilters, HelperFilters } from "@/components/tenant/tenant-helpers-filters"
+import { useTenantHelpers, TenantHelperSummary } from "@/hooks/use-tenant-helpers"
 import { useAppSelector } from "@/lib/hooks"
 import { PasswordResetComponent } from "@/components/tenant/password-reset-component"
 import { CreateHelperModal } from "@/components/modals/create-helper-modal"
+import { HelperActionModal } from "@/components/modals/helper-action-modal"
 import {
   Users,
   Eye,
@@ -27,11 +29,14 @@ import {
   UserPlus,
   Building2,
   Activity,
-  Clock
+  Clock,
+  Ban,
+  CheckCircle
 } from "lucide-react"
 
-interface TenantHelpersSectionProps {
+interface TenantHelpersSectionProps {  
   tenantId: string
+  tenantStatus?: string
 }
 
 // Modal pour les détails de l'assistant
@@ -261,7 +266,7 @@ const HelperDetailsModal = ({
   )
 }
 
-export const TenantHelpersSection = ({ tenantId }: TenantHelpersSectionProps) => {
+export const TenantHelpersSection = ({ tenantId, tenantStatus }: TenantHelpersSectionProps) => {
   const [showHelperDetails, setShowHelperDetails] = useState(false)
   const [showCreateHelper, setShowCreateHelper] = useState(false)
   const [showPasswordReset, setShowPasswordReset] = useState(false)
@@ -270,6 +275,13 @@ export const TenantHelpersSection = ({ tenantId }: TenantHelpersSectionProps) =>
     id: string
     name: string
   } | null>(null)
+
+const [showActionModal, setShowActionModal] = useState(false)
+const [actionType, setActionType] = useState<'suspend' | 'reactivate'>('suspend')
+const [selectedHelperForAction, setSelectedHelperForAction] = useState<{
+  id: string
+  name: string
+} | null>(null)
   
   const { user } = useAppSelector((state) => state.auth)
   
@@ -277,7 +289,7 @@ export const TenantHelpersSection = ({ tenantId }: TenantHelpersSectionProps) =>
     helpersSummary,
     myHelperDetails,
     superAdminHelpers,
-    helpers,
+    filteredHelpers,
     loading,
     error,
     canViewHelperDetails,
@@ -287,8 +299,27 @@ export const TenantHelpersSection = ({ tenantId }: TenantHelpersSectionProps) =>
     refresh,
     fetchSpecificHelperDetails,
     resetHelperPassword,
-    decodePassword
+    decodePassword,
+      suspendHelper,
+  reactivateHelper,
+  filters,
+  setFilters
   } = useTenantHelpers(tenantId)
+
+// Fonction pour vérifier si les actions sont autorisées selon le statut du tenant
+const isActionsAllowed = useCallback(() => {
+  if (!tenantStatus) return true // Si pas de statut, autoriser par défaut
+  
+  const restrictedStatuses = ['SUSPENDED', 'READ_ONLY', 'EMERGENCY_ACCESS']
+  return !restrictedStatuses.includes(tenantStatus.toUpperCase())
+}, [tenantStatus])
+
+const actionsAllowed = isActionsAllowed()
+
+
+
+// Alias pour garder la compatibilité
+const helpers = filteredHelpers
 
   const handleViewDetails = async (helperUserId: string, helperId?: string) => {
     try {
@@ -310,6 +341,41 @@ export const TenantHelpersSection = ({ tenantId }: TenantHelpersSectionProps) =>
     setSelectedHelperForReset({ id: helperId, name: helperName })
     setShowPasswordReset(true)
   }
+
+  const handleFiltersChange = (newFilters: HelperFilters) => {
+  setFilters(newFilters)
+}
+
+const handleSuspendHelper = (helperId: string, helperName: string) => {
+  setSelectedHelperForAction({ id: helperId, name: helperName })
+  setActionType('suspend')
+  setShowActionModal(true)
+}
+
+const handleReactivateHelper = (helperId: string, helperName: string) => {
+  setSelectedHelperForAction({ id: helperId, name: helperName })
+  setActionType('reactivate')
+  setShowActionModal(true)
+}
+
+const handleConfirmAction = async (): Promise<boolean> => {
+  if (!selectedHelperForAction) return false
+  
+  const success = actionType === 'suspend' 
+    ? await suspendHelper(selectedHelperForAction.id)
+    : await reactivateHelper(selectedHelperForAction.id)
+    
+  if (success) {
+    console.log(`Assistant ${actionType === 'suspend' ? 'suspendu' : 'réactivé'} avec succès`)
+  }
+  
+  return success
+}
+
+const handleCloseActionModal = () => {
+  setShowActionModal(false)
+  setSelectedHelperForAction(null)
+}
 
   const handlePasswordResetSubmit = async (newPassword: string): Promise<boolean> => {
     if (!selectedHelperForReset) return false
@@ -386,6 +452,55 @@ export const TenantHelpersSection = ({ tenantId }: TenantHelpersSectionProps) =>
     )
   }
 
+  const getStatusBadge = (status: string) => {
+  const upperStatus = status?.toUpperCase()
+  
+  switch (upperStatus) {
+    case 'ACTIVE':
+      return (
+        <Badge className="bg-green-100 text-green-800 border-green-200">
+          Actif
+        </Badge>
+      )
+    case 'PENDING':
+      return (
+        <Badge className="bg-orange-100 text-orange-800 border-orange-200">
+          En attente
+        </Badge>
+      )
+    case 'EMERGENCY_ACCESS':
+      return (
+        <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200">
+          Accès d'urgence
+        </Badge>
+      )
+    case 'READ_ONLY':
+      return (
+        <Badge className="bg-blue-100 text-blue-800 border-blue-200">
+          Lecture seule
+        </Badge>
+      )
+    case 'SUSPENDED':
+      return (
+        <Badge className="bg-red-100 text-red-800 border-red-200">
+          Suspendu
+        </Badge>
+      )
+    case 'DELETED':
+      return (
+        <Badge className="bg-gray-100 text-gray-800 border-gray-200">
+          Supprimé
+        </Badge>
+      )
+    default:
+      return (
+        <Badge variant="outline">
+          {status || 'Inconnu'}
+        </Badge>
+      )
+  }
+}
+
   return (
     <>
       <Card>
@@ -416,16 +531,38 @@ export const TenantHelpersSection = ({ tenantId }: TenantHelpersSectionProps) =>
         </CardHeader>
         
         <CardContent className="space-y-6">
-          {/* Résumé */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Filtres */}
+            <TenantHelpersFilters
+            filters={filters}
+            onFiltersChange={handleFiltersChange}
+            onRefresh={refresh}
+            loading={loading}
+            resultsCount={helpers.length}
+            />
+
+            {/* Indicateur de restriction */}
+            {!actionsAllowed && (
+            <Alert className="border-orange-200 bg-orange-50">
+                <AlertCircle className="h-4 w-4 text-orange-600" />
+                <AlertDescription className="text-orange-700">
+                <strong>Actions restreintes :</strong> Le statut du tenant ({tenantStatus}) ne permet pas de modifier les assistants.
+                </AlertDescription>
+            </Alert>
+            )}
+
+            {/* Résumé */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="bg-blue-50 p-4 rounded-lg">
-              <div className="flex items-center gap-2">
-                <Users className="h-5 w-5 text-blue-600" />
-                <div>
-                  <p className="text-sm text-blue-600 font-medium">Total des Assistants</p>
-                  <p className="text-2xl font-bold text-blue-700">{helpersCount}</p>
+                <div className="flex items-center gap-2">
+                    <Users className="h-5 w-5 text-blue-600" />
+                    <div>
+                    <p className="text-sm text-blue-600 font-medium">Assistants Affichés</p>
+                    <p className="text-2xl font-bold text-blue-700">{helpers.length}</p>
+                    {(filters.search || filters.status !== 'active' || filters.scope !== 'all') && (
+                        <p className="text-xs text-blue-600">sur {helpersCount} total</p>
+                    )}
+                    </div>
                 </div>
-              </div>
             </div>
             
             <div className="bg-green-50 p-4 rounded-lg">
@@ -463,46 +600,90 @@ export const TenantHelpersSection = ({ tenantId }: TenantHelpersSectionProps) =>
                   <TableRow>
                     <TableHead>Nom</TableHead>
                     <TableHead>Email</TableHead>
+                    <TableHead>Statut</TableHead>
                     <TableHead>Administrateur Assistant</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {helpers.map((helperItem, index) => (
+                    {helpers.map((helperItem: TenantHelperSummary, index: number) => (
                     <TableRow key={index}>
-                      <TableCell>
+                        <TableCell>
                         <div className="font-medium">
-                          {helperItem.helper.firstName} {helperItem.helper.lastName}
+                            {helperItem.helper.firstName} {helperItem.helper.lastName}
                         </div>
-                      </TableCell>
-                      <TableCell>
+                        </TableCell>
+                        <TableCell>
                         <div className="flex items-center gap-2">
-                          <Mail className="h-4 w-4 text-gray-400" />
-                          {helperItem.helper.email}
+                            <Mail className="h-4 w-4 text-gray-400" />
+                            {helperItem.helper.email}
                         </div>
-                      </TableCell>
-                      <TableCell>
+                        </TableCell>
+                        <TableCell>
+                            {getStatusBadge(helperItem.helper.status)}
+                        </TableCell>
+                        <TableCell>
                         <Badge variant="outline">
-                          {helperItem.adminHelper.email}
+                            {helperItem.adminHelper.email}
                         </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {canViewHelperDetails(helperItem.helper.userId) && (
-                          <Button
-                            onClick={() => handleViewDetails(helperItem.helper.userId)}
-                            variant="outline"
-                            size="sm"
-                          >
-                            <Eye className="h-4 w-4 mr-2" />
-                            Voir
-                          </Button>
-                        )}
-                        {!canViewHelperDetails(helperItem.helper.userId) && (
-                          <span className="text-sm text-gray-500">Accès refusé</span>
-                        )}
-                      </TableCell>
+                        </TableCell>
+                        <TableCell>
+                        <div className="flex gap-2">
+                            {/* Bouton Voir - TOUJOURS autorisé */}
+                            {canViewHelperDetails(helperItem.helper.userId) && (
+                            <Button
+                                onClick={() => handleViewDetails(helperItem.helper.userId)}
+                                variant="outline"
+                                size="sm"
+                            >
+                                <Eye className="h-4 w-4 mr-2" />
+                                Voir
+                            </Button>
+                            )}
+                            
+                            {/* Actions Suspendre/Réactiver - CONDITIONNELLES selon statut tenant */}
+                            {canViewHelperDetails(helperItem.helper.userId) && actionsAllowed && (
+                            <>
+                                {helperItem.helper.status === "SUSPENDED" ? (
+                                <Button 
+                                    variant="outline" 
+                                    size="sm"
+                                    className="border-green-500 text-green-700 hover:bg-green-50"
+                                    onClick={() => handleReactivateHelper(helperItem.helper.id || helperItem.helper.userId, `${helperItem.helper.firstName} ${helperItem.helper.lastName}`)}
+                                    disabled={loading}
+                                >
+                                    <CheckCircle className="h-4 w-4 mr-2" />
+                                    Réactiver
+                                </Button>
+                                ) : (
+                                <Button 
+                                    variant="outline" 
+                                    size="sm"
+                                    className="border-red-500 text-red-700 hover:bg-red-50"
+                                    onClick={() => handleSuspendHelper(helperItem.helper.id || helperItem.helper.userId, `${helperItem.helper.firstName} ${helperItem.helper.lastName}`)}
+                                    disabled={loading}
+                                >
+                                    <Ban className="h-4 w-4 mr-2" />
+                                    Suspendre
+                                </Button>
+                                )}
+                            </>
+                            )}
+                            
+                            {/* Messages d'état */}
+                            {!canViewHelperDetails(helperItem.helper.userId) && (
+                            <span className="text-sm text-gray-500">Accès refusé</span>
+                            )}
+                            
+                            {canViewHelperDetails(helperItem.helper.userId) && !actionsAllowed && (
+                            <span className="text-sm text-orange-600 font-medium">
+                                Actions restreintes
+                            </span>
+                            )}
+                        </div>
+                        </TableCell>
                     </TableRow>
-                  ))}
+                    ))}
                 </TableBody>
               </Table>
             </div>
@@ -550,16 +731,34 @@ export const TenantHelpersSection = ({ tenantId }: TenantHelpersSectionProps) =>
         onHelperCreated={refresh}
         />
       
-      <PasswordResetComponent
+      <HelperActionModal
+        isOpen={showActionModal}
+        onClose={handleCloseActionModal}
+        onConfirm={handleConfirmAction}
+        action={actionType}
+        helperName={selectedHelperForAction?.name || ""}
+        loading={loading}
+        />
+
+        <PasswordResetComponent
         isOpen={showPasswordReset}
         onClose={() => {
-          setShowPasswordReset(false)
-          setSelectedHelperForReset(null)
+            setShowPasswordReset(false)
+            setSelectedHelperForReset(null)
         }}
         onResetPassword={handlePasswordResetSubmit}
         helperName={selectedHelperForReset?.name || ""}
         loading={loading}
-      />
+        />
+
+        <HelperActionModal
+            isOpen={showActionModal}
+            onClose={handleCloseActionModal}
+            onConfirm={handleConfirmAction}
+            action={actionType}
+            helperName={selectedHelperForAction?.name || ""}
+            loading={loading}
+            />
     </>
   )
 }

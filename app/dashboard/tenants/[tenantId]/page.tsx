@@ -915,7 +915,7 @@ export default function TenantDetailPage() {
 
             {/* Onglet Assistants du Locataire */}
             <TabsContent value="helpers" className="space-y-6">
-              <TenantHelpersSection tenantId={params.tenantId as string} />
+              <TenantHelpersSection tenantId={params.tenantId as string}   tenantStatus={tenant?.status as string} />
             </TabsContent>
 
             {/* Onglet Utilisation */}

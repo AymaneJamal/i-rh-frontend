@@ -220,6 +220,33 @@ export const tenantHelpersApi = {
       console.error("❌ Erreur lors de la création de l'assistant:", error)
       throw error
     }
+  },
+
+
+  /**
+   * Suspend un assistant
+   * Endpoint: PUT /api/tenants/{tenantId}/{helperId}/suspend
+   */
+  suspendHelper: async (tenantId: string, helperId: string): Promise<PasswordResetResponse> => {
+    const response = await apiClient.put(
+      `/api/tenants/${tenantId}/${helperId}/suspend`,
+      {},
+      { includeUserEmail: true }
+    )
+    return response.data
+  },
+
+  /**
+   * Réactiver un assistant
+   * Endpoint: PUT /api/tenants/{tenantId}/{helperId}/reactivate  
+   */
+  reactivateHelper: async (tenantId: string, helperId: string): Promise<PasswordResetResponse> => {
+    const response = await apiClient.put(
+      `/api/tenants/${tenantId}/${helperId}/reactivate`,
+      {},
+      { includeUserEmail: true }
+    )
+    return response.data
   }
 
 }
