@@ -9,6 +9,7 @@ export interface TenantHelper {
   role: string
   userId: string
   email: string
+  status: string
 }
 
 export interface AdminHelper {
@@ -18,6 +19,7 @@ export interface AdminHelper {
     role: string
     userId: string
     email: string
+    status: string
 }
 
 export interface TenantHelperSummary {
