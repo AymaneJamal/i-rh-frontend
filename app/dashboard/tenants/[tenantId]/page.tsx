@@ -542,7 +542,7 @@ export default function TenantDetailPage() {
   // ===============================================================================
   if (loading) {
     return (
-      <ProtectedRoute requiredRole="ADMIN_PRINCIPAL">
+      <ProtectedRoute requiredRole="SUPER_ADMIN">
         <div className="flex items-center justify-center min-h-[400px]">
           <RefreshCw className="h-8 w-8 animate-spin text-blue-600 mr-3" />
           <span className="text-lg">Chargement des détails du tenant...</span>
@@ -553,7 +553,7 @@ export default function TenantDetailPage() {
 
   if (error || !tenant) {
     return (
-      <ProtectedRoute requiredRole="ADMIN_PRINCIPAL">
+      <ProtectedRoute requiredRole="SUPER_ADMIN">
         <div className="space-y-6">
           <div className="flex items-center">
             <Button variant="ghost" onClick={() => router.back()} className="mr-4">
@@ -578,7 +578,7 @@ export default function TenantDetailPage() {
   // RENDER PRINCIPAL
   // ===============================================================================
   return (
-    <ProtectedRoute requiredRole="ADMIN_PRINCIPAL">
+    <ProtectedRoute requiredRole="SUPER_ADMIN">
       <div className="min-h-screen bg-gray-50">
         {/* Header avec informations principales */}
         <div className="bg-white border-b">

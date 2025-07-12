@@ -388,7 +388,7 @@ export default function TenantsPage() {
   }
 
   return (
-    <ProtectedRoute requiredRole="ADMIN_PRINCIPAL">
+    <ProtectedRoute requiredRole="SUPER_ADMIN">
       <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">

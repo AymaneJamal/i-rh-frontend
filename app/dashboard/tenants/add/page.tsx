@@ -239,7 +239,7 @@ export default function CreateTenantPage() {
 
   if (success) {
     return (
-      <ProtectedRoute requiredRole="ADMIN_PRINCIPAL">
+      <ProtectedRoute requiredRole="SUPER_ADMIN">
         <div className="space-y-6">
           <div className="flex items-center space-x-4">
             <Button variant="ghost" onClick={handleBack}>

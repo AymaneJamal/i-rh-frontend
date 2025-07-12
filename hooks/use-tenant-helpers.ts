@@ -69,40 +69,75 @@ export const useTenantHelpers = (tenantId: string) => {
     })
     const [myHelperOnly, setMyHelperOnly] = useState<TenantHelperSummary[]>([])
   
-  const canViewHelperDetails = useCallback((helperId?: string) => {
-  if (!user || !helperId) return false
+    // Fonction pour vérifier si l'utilisateur peut voir les détails d'un helper
+ const canViewHelperDetails = useCallback((helperId?: string) => {
+  console.log("🔍 canViewHelperDetails called with:", {
+    helperId,
+    userRole: user?.role,
+    userEmail: user?.email,
+    hasHelpersSummary: !!helpersSummary?.data
+  })
   
-  // ADMIN_PRINCIPAL a TOUJOURS accès (sans vérifier helpersSummary)
+  if (!user || !helperId) {
+    console.log("❌ No user or helperId")
+    return false
+  }
+  
+  // ADMIN_PRINCIPAL a TOUJOURS accès
   if (user.role === "ADMIN_PRINCIPAL") {
+    console.log("✅ ADMIN_PRINCIPAL access granted")
     return true
   }
   
-  // Pour SUPER_ADMIN, vérifier helpersSummary
-  if (!helpersSummary) return false
-  
+  // Pour SUPER_ADMIN, utiliser LA MÊME LOGIQUE QUE LE FILTRE
   if (user.role === "SUPER_ADMIN") {
-    const helpers = Object.keys(helpersSummary.data)
-      .filter(key => key.startsWith('helper_'))
-      .map(key => helpersSummary.data[key] as TenantHelperSummary)
-    
-    const targetHelper = helpers.find(h => h.helper.id === helperId)
-    
-    if (targetHelper && targetHelper.adminHelper) {
-      const adminHelper = targetHelper.adminHelper as any
-      
-      if (adminHelper.email === user.email) {
-        return true
-      }
-      
-      if (adminHelper.isHelperOf && Array.isArray(adminHelper.isHelperOf)) {
-        return adminHelper.isHelperOf.some((helperRef: any) => 
-          helperRef.tenantId === tenantId && 
-          helperRef.tenantHelperId === helperId
-        )
-      }
+    if (!helpersSummary?.data) {
+      console.log("❌ No helpersSummary data")
+      return false
     }
+    
+    // Récupérer TOUS les helpers (même logique que helpers())
+    let baseHelpers: TenantHelperSummary[] = []
+    const data = helpersSummary.data
+    
+    Object.keys(data).forEach(key => {
+      if (key.startsWith('helper_') && typeof data[key] === 'object') {
+        baseHelpers.push(data[key] as TenantHelperSummary)
+      }
+    })
+    
+    console.log("📋 All baseHelpers:", baseHelpers.map(h => ({
+      id: h.helper.id,
+      userId: h.helper.userId,
+      adminEmail: h.adminHelper.email
+    })))
+    
+    // Appliquer le filtre "my_helpers" (même logique que le filtre)
+    const myHelpers = baseHelpers.filter(helperItem => 
+      helperItem.adminHelper.email === user.email
+    )
+    
+    console.log("👤 My helpers after filter:", myHelpers.map(h => ({
+      id: h.helper.id,
+      userId: h.helper.userId,
+      adminEmail: h.adminHelper.email
+    })))
+    
+    // Vérifier si le helperId est dans mes helpers - TESTER LES DEUX CHAMPS
+    const foundById = myHelpers.some(helperItem => helperItem.helper.id === helperId)
+    const foundByUserId = myHelpers.some(helperItem => helperItem.helper.userId === helperId)
+    
+    console.log("🔎 Search results:", {
+      helperId,
+      foundById,
+      foundByUserId,
+      finalResult: foundById || foundByUserId
+    })
+    
+    return foundById || foundByUserId
   }
   
+  console.log("❌ No access granted")
   return false
 }, [user, helpersSummary, tenantId])
 

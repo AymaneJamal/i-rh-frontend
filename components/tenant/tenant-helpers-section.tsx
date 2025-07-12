@@ -321,7 +321,7 @@ const actionsAllowed = isActionsAllowed()
 // Alias pour garder la compatibilité
 const helpers = filteredHelpers
 
-  const handleViewDetails = async (helperUserId: string, helperId?: string) => {
+    const handleViewDetails = async (helperUserId: string) => {
     try {
       const details = await fetchSpecificHelperDetails(helperUserId)
       if (details) {
@@ -332,6 +332,7 @@ const helpers = filteredHelpers
       console.error("Erreur lors de la récupération des détails:", error)
     }
   }
+
 
   const handleCreateHelper = () => {
     setShowCreateHelper(true)
