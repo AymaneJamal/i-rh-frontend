@@ -675,239 +675,369 @@ export default function TenantDetailPage() {
             </TabsList>
 
             {/* Onglet Vue d'ensemble */}
+            {/* Onglet Vue d'ensemble - VERSION MODERNISÉE */}
             <TabsContent value="overview" className="space-y-6">
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Informations principales */}
-                <div className="lg:col-span-2 space-y-6">
-                  {/* Informations générales */}
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="flex items-center">
-                        <Building2 className="h-5 w-5 mr-2" />
-                        Informations Générales
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="space-y-4">
-                          <div>
-                            <p className="text-sm font-medium text-gray-500">Nom de l'organisation</p>
-                            <p className="text-lg font-semibold">{tenant.name}</p>
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium text-gray-500">Industrie</p>
-                            <p className="text-base">{tenant.industry}</p>
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium text-gray-500">Région</p>
-                            <p className="text-base">{tenant.region}</p>
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium text-gray-500">Multi-tenant</p>
-                            <Badge variant={tenant.isMultiTenant === 1 ? "default" : "secondary"}>
-                              {tenant.isMultiTenant === 1 ? "Oui" : "Non"}
-                            </Badge>
-                          </div>
-                        </div>
-                        <div className="space-y-4">
-                          <div>
-                            <p className="text-sm font-medium text-gray-500">Localisation</p>
-                            <p className="text-base">{tenant.city}, {tenant.country}</p>
-                            {tenant.postalCode && <p className="text-sm text-gray-600">{tenant.postalCode}</p>}
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium text-gray-500">Configuration</p>
-                            <p className="text-base">{tenant.timeZone}</p>
-                            <p className="text-sm text-gray-600">Langue: {tenant.language}</p>
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium text-gray-500">Créé le</p>
-                            <p className="text-base">{formatDate(tenant.createdAt)}</p>
-                            <p className="text-sm text-gray-600">Par: {tenant.createdBy}</p>
-                          </div>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  {/* Informations de contact */}
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="flex items-center">
-                        <Mail className="h-5 w-5 mr-2" />
-                        Informations de Contact
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
-                          <p className="text-sm font-medium text-gray-500 flex items-center">
-                            <Mail className="h-4 w-4 mr-2" />
-                            Email de facturation
-                          </p>
-                          <p className="text-base font-medium">{tenant.billingEmail || "Non défini"}</p>
+              <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
+                {/* Contenu principal */}
+                <div className="xl:col-span-3 space-y-6">
+                  
+                  {/* Informations Générales - Design modernisé */}
+                  <Card className="overflow-hidden border-slate-200 shadow-sm">
+                    <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-blue-100">
+                      <CardTitle className="flex items-center text-slate-800">
+                        <div className="flex items-center justify-center w-10 h-10 bg-blue-100 rounded-lg mr-3">
+                          <Building2 className="h-5 w-5 text-blue-600" />
                         </div>
                         <div>
-                          <p className="text-sm font-medium text-gray-500 flex items-center">
-                            <Phone className="h-4 w-4 mr-2" />
-                            Téléphone
-                          </p>
-                          <p className="text-base font-medium">{tenant.phone || "Non défini"}</p>
+                          <h3 className="text-lg font-semibold">Informations Générales</h3>
+                          <p className="text-sm text-slate-600 font-normal">Détails de l'organisation et configuration</p>
                         </div>
-                        <div className="md:col-span-2">
-                          <p className="text-sm font-medium text-gray-500 flex items-center">
-                            <MapPin className="h-4 w-4 mr-2" />
-                            Adresse complète
-                          </p>
-                          <p className="text-base">
-                            {tenant.address && tenant.city && tenant.country
-                              ? `${tenant.address}, ${tenant.city}, ${tenant.country}`
-                              : "Non définie"
-                            }
-                          </p>
-                        </div>
-                        {tenant.domains && tenant.domains.length > 0 && (
-                          <div className="md:col-span-2">
-                            <p className="text-sm font-medium text-gray-500 flex items-center">
-                              <Globe className="h-4 w-4 mr-2" />
-                              Domaines associés
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-6">
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                        
+                        {/* Colonne gauche - Informations principales */}
+                        <div className="space-y-6">
+                          <div className="group">
+                            <div className="flex items-center space-x-2 mb-3">
+                              <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                              <p className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Organisation</p>
+                            </div>
+                            <p className="text-2xl font-bold text-slate-900 group-hover:text-blue-600 transition-colors">
+                              {tenant.name}
                             </p>
-                            <div className="flex flex-wrap gap-2 mt-2">
-                              {tenant.domains.map((domain, index) => (
-                                <Badge key={index} variant="outline" className="text-xs">
-                                  {domain}
-                                </Badge>
-                              ))}
+                          </div>
+                          
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <div className="flex items-center space-x-2 mb-2">
+                                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                                <p className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Industrie</p>
+                              </div>
+                              <p className="text-base text-slate-700 font-medium">{tenant.industry}</p>
+                            </div>
+                            <div>
+                              <div className="flex items-center space-x-2 mb-2">
+                                <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
+                                <p className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Région</p>
+                              </div>
+                              <p className="text-base text-slate-700 font-medium">{tenant.region}</p>
                             </div>
                           </div>
-                        )}
-                        {tenant.legalNumbers && Object.keys(tenant.legalNumbers).length > 0 && (
-                          <div className="md:col-span-2">
-                            <p className="text-sm font-medium text-gray-500">Numéros légaux</p>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
-                              {Object.entries(tenant.legalNumbers).map(([key, value]) => (
-                                <div key={key} className="text-sm">
-                                  <span className="font-medium text-gray-600">{key}:</span>
-                                  <span className="ml-2">{value as string}</span>
-                                </div>
-                              ))}
+
+                          <div className="grid grid-cols-1 gap-4">
+                            <div>
+                            <div className="flex items-center space-x-2 mb-3">
+                              <MapPin className="h-4 w-4 text-slate-500" />
+                              <p className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Localisation</p>
+                            </div>
+                            <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                              <p className="text-lg font-semibold text-slate-900">{tenant.city}, {tenant.country}</p>
+                              {tenant.postalCode && <p className="text-sm text-slate-600 mt-1">{tenant.postalCode}</p>}
                             </div>
                           </div>
-                        )}
+                          </div>
+                        </div>
+                        
+                        {/* Colonne droite - Localisation et Configuration */}
+                        <div className="space-y-6">
+                          
+                          <div>
+                            <div className="flex items-center space-x-2 mb-3">
+                              <Globe className="h-4 w-4 text-slate-500" />
+                              <p className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Configuration</p>
+                            </div>
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between py-2 px-3 bg-slate-50 rounded border border-slate-200">
+                                <span className="text-sm text-slate-600">Fuseau horaire</span>
+                                <span className="text-sm font-medium text-slate-900">{tenant.timeZone}</span>
+                              </div>
+                              <div className="flex items-center justify-between py-2 px-3 bg-slate-50 rounded border border-slate-200">
+                                <span className="text-sm text-slate-600">Langue</span>
+                                <span className="text-sm font-medium text-slate-900 uppercase">{tenant.language}</span>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          <div>
+                            <div className="flex items-center space-x-2 mb-3">
+                              <Calendar className="h-4 w-4 text-slate-500" />
+                              <p className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Création</p>
+                            </div>
+                            <div className="bg-slate-50 rounded-lg p-3 border border-slate-200">
+                              <p className="text-base font-semibold text-slate-900">{formatDate(tenant.createdAt)}</p>
+                              <p className="text-sm text-slate-600">Par: {tenant.createdBy}</p>
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     </CardContent>
                   </Card>
-                                <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center">
-                    <CreditCard className="h-5 w-5 mr-2" />
-                    Détails de l'Abonnement
-                    {statusLoading && <RefreshCw className="h-4 w-4 ml-2 animate-spin" />}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {tenant.plan ? (
-                    <div className="space-y-6">
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <div className="bg-blue-50 p-4 rounded-lg">
-                          <p className="text-sm font-medium text-blue-600">Plan actuel</p>
-                          <p className="text-xl font-bold text-blue-900">{tenant.plan.name}</p>
+
+                  {/* Informations de Contact - Design modernisé */}
+                  <Card className="overflow-hidden border-slate-200 shadow-sm">
+                    <CardHeader className="bg-gradient-to-r from-green-50 to-emerald-50 border-b border-green-100">
+                      <CardTitle className="flex items-center text-slate-800">
+                        <div className="flex items-center justify-center w-10 h-10 bg-green-100 rounded-lg mr-3">
+                          <Mail className="h-5 w-5 text-green-600" />
                         </div>
-                        <div className="bg-green-50 p-4 rounded-lg">
-                          <p className="text-sm font-medium text-green-600">Statut</p>
-                          <Badge variant={subscriptionStatus === "ACTIVE" ? "default" : "secondary"} className="text-sm">
-                            {subscriptionStatus || "Inconnu"}
-                          </Badge>
+                        <div>
+                          <h3 className="text-lg font-semibold">Informations de Contact</h3>
+                          <p className="text-sm text-slate-600 font-normal">Coordonnées et informations légales</p>
                         </div>
-                        <div className="bg-gray-50 p-4 rounded-lg">
-                          <p className="text-sm font-medium text-gray-600">Devise</p>
-                          <p className="text-xl font-bold text-gray-900">{tenant.currency || 'MAD'}</p>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-6">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        
+                        {/* Email et téléphone */}
+                        <div className="space-y-4">
+                          <div className="group">
+                            <div className="flex items-center space-x-2 mb-2">
+                              <Mail className="h-4 w-4 text-green-600" />
+                              <p className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Email de facturation</p>
+                            </div>
+                            <div className="bg-green-50 border border-green-200 rounded-lg p-3 group-hover:bg-green-100 transition-colors">
+                              <p className="text-base font-medium text-green-900">{tenant.billingEmail || "Non défini"}</p>
+                            </div>
+                          </div>
+                          
+                          <div className="group">
+                            <div className="flex items-center space-x-2 mb-2">
+                              <Phone className="h-4 w-4 text-blue-600" />
+                              <p className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Téléphone</p>
+                            </div>
+                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 group-hover:bg-blue-100 transition-colors">
+                              <p className="text-base font-medium text-blue-900">{tenant.phone || "Non défini"}</p>
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                      
-                      <div>
-                        <p className="text-sm font-medium text-gray-500">ID du plan</p>
-                        <p className="text-sm font-mono bg-gray-100 px-3 py-2 rounded mt-1">{tenant.plan.id}</p>
+                        
+                        {/* Adresse complète */}
+                        <div>
+                          <div className="flex items-center space-x-2 mb-2">
+                            <MapPin className="h-4 w-4 text-purple-600" />
+                            <p className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Adresse complète</p>
+                          </div>
+                          <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                            <p className="text-base font-medium text-purple-900 leading-relaxed">
+                              {tenant.address && tenant.city && tenant.country
+                                ? `${tenant.address}, ${tenant.city}, ${tenant.country}`
+                                : "Adresse non renseignée"
+                              }
+                            </p>
+                          </div>
+                        </div>
                       </div>
 
-                      {tenant.isInGracePeriod === 1 && (
-                        <Alert variant="destructive">
-                          <AlertCircle className="h-4 w-4" />
-                          <AlertDescription>
-                            Ce tenant est en période de grâce.
-                          </AlertDescription>
-                        </Alert>
+                      {/* Numéros légaux */}
+                      {tenant.legalNumbers && (
+                        <div className="mt-6 pt-6 border-t border-slate-200">
+                          <div className="flex items-center space-x-2 mb-4">
+                            <Shield className="h-4 w-4 text-slate-600" />
+                            <p className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Numéros légaux</p>
+                          </div>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            {Object.entries(tenant.legalNumbers).map(([key, value]) => (
+                              <div key={key} className="bg-slate-50 rounded-lg p-3 border border-slate-200">
+                                <p className="text-xs text-slate-500 uppercase font-semibold mb-1">{key}</p>
+                                <p className="text-sm font-mono text-slate-900">{String(value) || "Non défini"}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
                       )}
-                    </div>
-                  ) : (
-                    <div className="text-center py-12">
-                      <CreditCard className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-                      <h3 className="text-lg font-medium text-gray-900 mb-2">Aucun plan attribué</h3>
-                      <p className="text-gray-500 mb-6">Ce tenant n'a pas encore de plan d'abonnement.</p>
-                      <Button onClick={handleAssignPlan}>
-                        <CreditCard className="h-4 w-4 mr-2" />
-                        Attribuer un Plan
-                      </Button>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+                    </CardContent>
+                  </Card>
+
+                  {/* Détails de l'Abonnement - Design modernisé */}
+                  <Card className="overflow-hidden border-slate-200 shadow-sm">
+                    <CardHeader className="bg-gradient-to-r from-amber-50 to-yellow-50 border-b border-amber-100">
+                      <CardTitle className="flex items-center text-slate-800">
+                        <div className="flex items-center justify-center w-10 h-10 bg-amber-100 rounded-lg mr-3">
+                          <CreditCard className="h-5 w-5 text-amber-600" />
+                        </div>
+                        <div>
+                          <h3 className="text-lg font-semibold">Détails de l'Abonnement</h3>
+                          <p className="text-sm text-slate-600 font-normal">Plan actuel et informations de facturation</p>
+                        </div>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-6">
+                      {hasSubscription && tenant.plan ? (
+                        <div className="space-y-6">
+                          
+                          {/* Métriques principales */}
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white p-6 rounded-xl shadow-md">
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <p className="text-blue-100 text-sm font-medium">Plan actuel</p>
+                                  <p className="text-xl font-bold">{tenant.plan.name}</p>
+                                  <p className="text-blue-200 text-sm">Abonnement</p>
+                                </div>
+                                <div className="bg-blue-400 bg-opacity-30 p-3 rounded-lg">
+                                  <CreditCard className="h-6 w-6" />
+                                </div>
+                              </div>
+                            </div>
+                            
+                            <div className="bg-gradient-to-br from-green-500 to-green-600 text-white p-6 rounded-xl shadow-md">
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <p className="text-green-100 text-sm font-medium">Statut</p>
+                                  <div className="flex items-center space-x-2 mt-1">
+                                    <Badge 
+                                      variant="outline" 
+                                      className={`${subscriptionStatus === "ACTIVE" ? "bg-white text-green-700 border-white" : "bg-green-400 text-white border-white"} text-sm font-semibold`}
+                                    >
+                                      {subscriptionStatus || "Inconnu"}
+                                    </Badge>
+                                  </div>
+                                </div>
+                                <div className="bg-green-400 bg-opacity-30 p-3 rounded-lg">
+                                  <CheckCircle className="h-6 w-6" />
+                                </div>
+                              </div>
+                            </div>
+                            
+                            <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white p-6 rounded-xl shadow-md">
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <p className="text-purple-100 text-sm font-medium">Devise</p>
+                                  <p className="text-xl font-bold">{tenant.currency || 'MAD'}</p>
+                                  <p className="text-purple-200 text-sm">Facturation</p>
+                                </div>
+                                <div className="bg-purple-400 bg-opacity-30 p-3 rounded-lg">
+                                  <DollarSign className="h-6 w-6" />
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          {/* ID du plan 
+                          <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="text-sm font-semibold text-slate-600 mb-1">Identifiant du plan</p>
+                                <p className="text-sm font-mono bg-white px-3 py-2 rounded border border-slate-300 text-slate-900">
+                                  {tenant.plan.id}
+                                </p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-xs text-slate-500">ID Tenant</p>
+                                <p className="text-sm font-mono text-slate-700">{tenantId.slice(-8)}</p>
+                              </div>
+                            </div>
+                          </div>*/}
+
+                          {/* Alertes de période de grâce */}
+                          {tenant.isInGracePeriod === 1 && (
+                            <Alert variant="destructive" className="border-red-200 bg-red-50">
+                              <AlertCircle className="h-4 w-4 text-red-600" />
+                              <AlertDescription className="text-red-800">
+                                <strong>Période de grâce active</strong> - Ce tenant bénéficie actuellement d'une période de grâce.
+                                Vérifiez les dates d'expiration et le statut de paiement.
+                              </AlertDescription>
+                            </Alert>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="text-center py-16">
+                          <div className="bg-slate-100 rounded-full p-6 w-24 h-24 mx-auto mb-6 flex items-center justify-center">
+                            <CreditCard className="h-12 w-12 text-slate-400" />
+                          </div>
+                          <h3 className="text-xl font-semibold text-slate-900 mb-3">Aucun plan attribué</h3>
+                          <p className="text-slate-500 mb-8 max-w-md mx-auto">
+                            Ce tenant n'a pas encore de plan d'abonnement. Attribuez un plan pour activer les services.
+                          </p>
+                          <Button 
+                            onClick={handleAssignPlan}
+                            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium"
+                          >
+                            <CreditCard className="h-4 w-4 mr-2" />
+                            Attribuer un Plan
+                          </Button>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
                 </div>
 
-                {/* Sidebar */}
+                {/* Sidebar - Actions et Administrateur */}
                 <div className="space-y-6">
-                  {/* Actions */}
+                  
+                  {/* Actions Tenant - FONCTIONNALITÉS PRÉSERVÉES */}
                   <TenantActionCard
-                      tenant={tenant}
-                      statusHistory={statusHistory}
-                      onAssignPlan={handleAssignPlan}
-                      onSuspend={() => setShowSuspendModal(true)}
-                      onReactivate={() => setShowReactivateModal(true)}
-                      onEmergencyAccess={handleEmergencyAccess}
-                      onReadOnlyAccess={handleReadOnlyAccess}
-                      loading={actionLoading}
-                    />
+                    tenant={tenant}
+                    statusHistory={statusHistory}
+                    onAssignPlan={handleAssignPlan}
+                    onSuspend={() => setShowSuspendModal(true)}
+                    onReactivate={() => setShowReactivateModal(true)}
+                    onEmergencyAccess={handleEmergencyAccess}
+                    onReadOnlyAccess={handleReadOnlyAccess}
+                    loading={actionLoading}
+                  />
 
-                  {/* Administrateur */}
+                  {/* Administrateur - Design modernisé */}
                   {adminUser && (
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="flex items-center">
-                          <User className="h-5 w-5 mr-2" />
-                          Administrateur
+                    <Card className="overflow-hidden border-slate-200 shadow-sm">
+                      <CardHeader className="bg-gradient-to-r from-indigo-50 to-blue-50 border-b border-indigo-100">
+                        <CardTitle className="flex items-center text-slate-800">
+                          <div className="flex items-center justify-center w-8 h-8 bg-indigo-100 rounded-lg mr-3">
+                            <User className="h-4 w-4 text-indigo-600" />
+                          </div>
+                          <div>
+                            <h3 className="text-base font-semibold">Administrateur</h3>
+                            <p className="text-xs text-slate-600 font-normal">Compte principal du tenant</p>
+                          </div>
                         </CardTitle>
                       </CardHeader>
-                      <CardContent>
-                        <div className="space-y-3">
-                          <div>
-                            <p className="text-sm font-medium text-gray-500">Nom complet</p>
-                            <p className="text-base font-semibold">{adminUser.firstName} {adminUser.lastName}</p>
+                      <CardContent className="p-5">
+                        <div className="space-y-4">
+                          
+                          {/* Nom et email */}
+                          <div className="text-center pb-4 border-b border-slate-100">
+                            <div className="w-16 h-16 bg-indigo-100 rounded-full mx-auto mb-3 flex items-center justify-center">
+                              <User className="h-8 w-8 text-indigo-600" />
+                            </div>
+                            <h4 className="text-lg font-bold text-slate-900 mb-1">
+                              {adminUser.firstName} {adminUser.lastName}
+                            </h4>
+                            <p className="text-sm text-slate-600 break-all">{adminUser.email}</p>
                           </div>
-                          <div>
-                            <p className="text-sm font-medium text-gray-500">Email</p>
-                            <p className="text-base">{adminUser.email}</p>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <p className="text-sm font-medium text-gray-500">Statut</p>
-                            <Badge variant={adminUser.status === "ACTIVE" ? "default" : "secondary"}>
-                              {adminUser.status}
-                            </Badge>
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium text-gray-500">Rôle</p>
-                            <p className="text-base">{adminUser.companyRole || adminUser.role}</p>
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium text-gray-500">Dernière connexion</p>
-                            <p className="text-sm text-gray-600">
-                              {adminUser.lastLoginAt ? formatDate(adminUser.lastLoginAt) : "Jamais"}
-                            </p>
+                          
+                          {/* Informations détaillées */}
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between py-2">
+                              <span className="text-sm text-slate-500">Statut</span>
+                              <Badge 
+                                variant={adminUser.status === "ACTIVE" ? "default" : "secondary"}
+                                className={`${adminUser.status === "ACTIVE" ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'} text-xs`}
+                              >
+                                {adminUser.status}
+                              </Badge>
+                            </div>
+                            
+                            <div className="flex items-center justify-between py-2">
+                              <span className="text-sm text-slate-500">Rôle</span>
+                              <span className="text-sm font-medium text-slate-900 text-right">
+                                {adminUser.companyRole || adminUser.role}
+                              </span>
+                            </div>
+                            
+                            <div className="pt-2 border-t border-slate-100">
+                              <p className="text-xs text-slate-500 mb-1">Dernière connexion</p>
+                              <p className="text-sm font-medium text-slate-700">
+                                {adminUser.lastLoginAt ? formatDate(adminUser.lastLoginAt) : "Jamais connecté"}
+                              </p>
+                            </div>
                           </div>
                         </div>
                       </CardContent>
                     </Card>
                   )}
-                  
                 </div>
               </div>
             </TabsContent>

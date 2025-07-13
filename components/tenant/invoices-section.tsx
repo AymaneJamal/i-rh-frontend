@@ -237,7 +237,7 @@ export function InvoicesSection({
                     <TableHead>Statut</TableHead>
                     <TableHead>Paiement</TableHead>
                     <TableHead>Date</TableHead>
-                    <TableHead>Actions</TableHead>
+                    {/* <TableHead>Actions</TableHead> */}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -297,6 +297,7 @@ export function InvoicesSection({
                         </Badge>
                       </TableCell>
                       
+                     {/* 
                       <TableCell>
                         <Badge 
                           variant="secondary" 
@@ -304,7 +305,7 @@ export function InvoicesSection({
                         >
                           {invoice.paymentStatus}
                         </Badge>
-                      </TableCell>
+                      </TableCell>*/}
                       
                       <TableCell>
                         <div className="text-sm">

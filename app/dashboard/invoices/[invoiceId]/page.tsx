@@ -13,6 +13,7 @@ import { formatCurrency, formatDate } from "@/lib/formatters"
 import { ModifyInvoiceModal } from "@/components/modals/modify-invoice-modal"
 import { Currency } from "@/lib/constants"
 import { tenantInvoicesApi } from "@/lib/api/tenant-invoices"
+import { AddReceiptModal } from "@/components/modals/add-receipt-modal"
 import { Loader2 } from "lucide-react"
 import {
   ArrowLeft,
@@ -50,6 +51,7 @@ export default function InvoiceDetailPage() {
   const [error, setError] = useState<string | null>(null)
   const [showModifyModal, setShowModifyModal] = useState(false)
   const [reloading, setReloading] = useState(false)
+  const [showAddReceiptModal, setShowAddReceiptModal] = useState(false)
 
   useEffect(() => {
     const storedInvoice = sessionStorage.getItem(`invoice-${invoiceId}`)
@@ -132,9 +134,16 @@ const handleInvoiceModified = async () => {
   }
 }
 
-  const handleAddReceipt = () => {
-    console.log("Ajouter un reçu:", invoiceId)
-  }
+    const handleAddReceipt = () => {
+    setShowAddReceiptModal(true)
+    }
+
+    const handleReceiptAdded = async () => {
+    console.log("✅ Reçu ajouté avec succès")
+    
+    // Réutiliser la même logique que handleInvoiceModified
+    await handleInvoiceModified()
+    }
 
   const formatPrice = (amount: number, currency: string | null): string => {
     return formatCurrency(amount, (currency || 'MAD') as Currency)
@@ -792,6 +801,13 @@ const handleInvoiceModified = async () => {
         onClose={() => setShowModifyModal(false)}
         invoice={invoice}
         onInvoiceModified={handleInvoiceModified}
+        />
+        {/* Modal pour ajouter un reçu */}
+        <AddReceiptModal
+        isOpen={showAddReceiptModal}
+        onClose={() => setShowAddReceiptModal(false)}
+        invoice={invoice}
+        onReceiptAdded={handleReceiptAdded}
         />
    </ProtectedRoute>
  )
