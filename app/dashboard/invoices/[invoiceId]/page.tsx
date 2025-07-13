@@ -15,6 +15,8 @@ import { Currency } from "@/lib/constants"
 import { tenantInvoicesApi } from "@/lib/api/tenant-invoices"
 import { AddReceiptModal } from "@/components/modals/add-receipt-modal"
 import { Loader2 } from "lucide-react"
+import { useDownloadReceipt } from "@/hooks/use-download-receipt"
+import { useDownloadInvoicePdf } from "@/hooks/use-download-invoice-pdf"
 import {
   ArrowLeft,
   FileText,
@@ -52,6 +54,8 @@ export default function InvoiceDetailPage() {
   const [showModifyModal, setShowModifyModal] = useState(false)
   const [reloading, setReloading] = useState(false)
   const [showAddReceiptModal, setShowAddReceiptModal] = useState(false)
+  const { downloading, error: downloadError, downloadReceipt } = useDownloadReceipt()
+  const { downloadingPdf, pdfError, downloadInvoicePdf } = useDownloadInvoicePdf()
 
   useEffect(() => {
     const storedInvoice = sessionStorage.getItem(`invoice-${invoiceId}`)
@@ -143,6 +147,16 @@ const handleInvoiceModified = async () => {
     
     // Réutiliser la même logique que handleInvoiceModified
     await handleInvoiceModified()
+    }
+
+    const handleDownloadReceipt = async (receiptName: string) => {
+        if (!invoice) return
+        await downloadReceipt(invoice.invoiceId, receiptName)
+    }
+
+    const handleDownloadInvoicePdf = async () => {
+        if (!invoice) return
+        await downloadInvoicePdf(invoice.invoiceId, "standard-invoice")
     }
 
   const formatPrice = (amount: number, currency: string | null): string => {
@@ -326,15 +340,24 @@ const handleInvoiceModified = async () => {
                     </Button>
                 )}
                 
-                {invoice.pdfFileUrl && (
-                  <Button 
-                    variant="outline"
-                    className="bg-white/10 border-white/20 text-white hover:bg-white/20"
-                  >
-                    <Download className="h-4 w-4 mr-2" />
-                    PDF
-                  </Button>
+                <Button 
+                onClick={handleDownloadInvoicePdf}
+                disabled={reloading || downloadingPdf}
+                variant="outline"
+                className="bg-blue-500 hover:bg-blue-600 text-white border-blue-500 hover:border-blue-600 disabled:opacity-50"
+                >
+                {downloadingPdf ? (
+                    <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Génération...
+                    </>
+                ) : (
+                    <>
+                    <FileText className="h-4 w-4 mr-2" />
+                    Télécharger Facture
+                    </>
                 )}
+                </Button>
               </div>
             </div>
 
@@ -379,6 +402,20 @@ const handleInvoiceModified = async () => {
                     </AlertDescription>
                     </Alert>
                 </div>
+                )}
+
+                {downloadError && (
+                <Alert variant="destructive" className="mb-6">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>{downloadError}</AlertDescription>
+                </Alert>
+                )}
+
+                {pdfError && (
+                <Alert variant="destructive" className="mb-6">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>{pdfError}</AlertDescription>
+                </Alert>
                 )}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             
@@ -600,9 +637,24 @@ const handleInvoiceModified = async () => {
                               </div>
                             </div>
                           </div>
-                          <Button variant="outline" size="lg" className="ml-4">
-                            <Download className="h-4 w-4 mr-2" />
-                            Télécharger
+                          <Button 
+                            variant="outline" 
+                            size="lg" 
+                            className="ml-4"
+                            onClick={() => handleDownloadReceipt(attachment.fileName)}
+                            disabled={downloading === attachment.fileName}
+                            >
+                            {downloading === attachment.fileName ? (
+                                <>
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                Téléchargement...
+                                </>
+                            ) : (
+                                <>
+                                <Download className="h-4 w-4 mr-2" />
+                                Télécharger
+                                </>
+                            )}
                           </Button>
                         </div>
                       ))}
