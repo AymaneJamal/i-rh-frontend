@@ -21,6 +21,7 @@ import { tenantSubscriptionApi } from "@/lib/api/tenant-subscription"
 import { formatCurrency, formatDate, formatDuration } from "@/lib/formatters"
 import { formatBytes } from "@/lib/utils"
 import { Currency } from "@/lib/constants"
+import { ExtendPlanModal } from "@/components/modals/extend-plan-modal"
 // Import des sections History et Invoices
 import { StatusHistorySection } from "@/components/tenant/status-history-section"
 import { InvoicesSection } from "@/components/tenant/invoices-section"
@@ -30,7 +31,8 @@ import { TenantHelpersSection } from "@/components/tenant/tenant-helpers-section
 
 import { EmergencyAccessModal } from "@/components/modals/emergency-access-modal"
 import { ReadOnlyModal } from "@/components/modals/read-only-modal"
-import { ExtendPlanModal } from "@/components/modals/extend-plan-modal"
+
+
 
 import {
   ArrowLeft,
@@ -1151,16 +1153,18 @@ export default function TenantDetailPage() {
            </TabsContent>
 
            {/* Onglet Facturation */}
-           <TabsContent value="billing" className="space-y-6">
-             <InvoicesSection 
-              invoices={historyInvoices}
-              loading={historyInvoicesLoading}
-              error={historyInvoicesError}
-              onRefresh={refreshHistoryInvoices}
-              onExtendPlan={handleExtendPlan}
-              tenant={tenant}
+           {/* Onglet Facturation - MODIFIÉ */}
+          <TabsContent value="billing" className="space-y-6">
+            <InvoicesSection 
+              invoices={invoices}
+              loading={invoicesLoading}
+              error={invoicesError}
+              onRefresh={refreshInvoices}
+              onExtendPlan={handleExtendPlan} // ← Passer la fonction d'extension
+              tenant={tenant} // ← Passer les données du tenant
             />
-           </TabsContent>
+          </TabsContent>
+
 
            {/* Onglet Historique */}
            <TabsContent value="history" className="space-y-6">

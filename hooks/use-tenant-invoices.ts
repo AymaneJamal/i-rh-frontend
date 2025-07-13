@@ -3,7 +3,9 @@ import { useState, useEffect, useCallback } from "react"
 import { invoiceManagementApi } from "@/lib/api/invoice-management"
 import { BillingType, InvoiceTemplate } from "@/lib/constants"
 
-interface Invoice {
+// Dans hooks/use-tenant-invoices.ts
+export interface Invoice {
+  // Propriétés existantes...
   invoiceId: string
   invoiceNumber: string
   tenantId: string
@@ -32,6 +34,46 @@ interface Invoice {
   generatedBy: string
   createdAt: number
   modifiedAt?: number
+  
+  // AJOUTER ces propriétés pour la compatibilité :
+  billingPeriodStart?: number  // ← Optionnel avec ?
+  billingPeriodEnd?: number    // ← Optionnel avec ?
+  discountAmount?: number      // ← Optionnel avec ?
+  discountReason?: string | null
+  invoiceType?: string         // ← Optionnel avec ?
+  lineItems?: any | null
+  billingEmail?: string
+  billingName?: string
+  billingAddress?: any
+  vatNumber?: string | null
+  s3BucketName?: string | null
+  s3Key?: string | null
+  attachments?: any | null
+  sentDate?: number | null
+  emailSent?: boolean | null
+  emailSentTo?: string | null
+  fiscalYear?: string | null
+  legalEntity?: string | null
+  notes?: string | null
+  termsAndConditions?: string | null
+  auditTrail?: any[]
+  parentInvoiceId?: string | null
+  isPrepayedInvoiceReason?: string | null
+  isPrepayeInvoiceContab?: number
+  isRecurring?: boolean | null
+  recurringSchedule?: string | null
+  creditReason?: string | null
+  refundAmount?: number | null
+  refundDate?: number | null
+  refundReason?: string | null
+  autoRenewalEnabled?: number | null
+  isAutoGracePeriod?: number | null
+  isManualGracePeriod?: number | null
+  manualGracePeriodSetBy?: string | null
+  manualGracePeriodSetAt?: number | null
+  manualGracePeriodModifiedAt?: number | null
+  gracePeriodStartDate?: number | null
+  gracePeriodEndDate?: number | null
 }
 
 export const useTenantInvoices = (tenantId: string) => {
