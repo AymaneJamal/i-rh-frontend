@@ -1,6 +1,18 @@
 // lib/api/tenant-invoices.ts
 import { apiClient } from "@/lib/api-client"
 
+export interface GetInvoiceResponse {
+  success: boolean
+  data: {
+    getInvoiceResult: {  // ← Sans espace maintenant
+      invoice: TenantInvoice
+    }
+  }
+  message: string
+  timestamp: number
+  requestId: string
+}
+
 export interface BillingAddress {
   country: string
   rc: string
@@ -84,6 +96,15 @@ export interface TenantInvoice {
   refundAmount: number | null
   refundDate: number | null
   refundReason: string | null
+  // Ajouter ces propriétés manquantes :
+  autoRenewalEnabled: number | null
+  isAutoGracePeriod: number | null
+  isManualGracePeriod: number | null
+  manualGracePeriodSetBy: string | null
+  manualGracePeriodSetAt: number | null
+  manualGracePeriodModifiedAt: number | null
+  gracePeriodStartDate: number | null
+  gracePeriodEndDate: number | null
 }
 
 export interface TenantInvoicesResponse {
@@ -123,5 +144,33 @@ export const tenantInvoicesApi = {
       })
       throw error
     }
+  },
+
+  /**
+ * Get single invoice by tenantId and invoiceId
+ */
+getInvoiceById: async (tenantId: string, invoiceId: string): Promise<GetInvoiceResponse> => {
+  try {
+    console.log("🔍 Fetching invoice:", invoiceId, "for tenant:", tenantId)
+    
+    const response = await apiClient.get(
+      `/api/subscriptions/invoices/${tenantId}/${invoiceId}/read`,
+      { includeUserEmail: true }
+    )
+    
+    console.log("✅ Invoice fetched successfully:", response.data)
+    return response.data
+  } catch (error: any) {
+    console.error("❌ Failed to fetch invoice:", error)
+    console.error("❌ Error details:", {
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data,
+      url: error.config?.url,
+      tenantId,
+      invoiceId
+    })
+    throw error
   }
+}
 }

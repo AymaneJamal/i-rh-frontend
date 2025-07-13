@@ -13,6 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { useRouter } from "next/navigation"
 import { TenantInvoice } from "@/lib/api/tenant-invoices"
 import { formatCurrency, formatDate } from "@/lib/formatters"
 import { Currency } from "@/lib/constants"
@@ -89,6 +90,7 @@ export function InvoicesSection({
   onExtendPlan,
   tenant
 }: InvoicesSectionProps) {
+  const router = useRouter()
   
   if (error) {
     return (
@@ -321,8 +323,10 @@ export function InvoicesSection({
                             variant="ghost"
                             size="sm"
                             onClick={() => {
-                              // TODO: Implement view invoice details
-                              console.log("View invoice:", invoice.invoiceId)
+                              // Stocker la facture dans sessionStorage pour la page de détails
+                              sessionStorage.setItem(`invoice-${invoice.invoiceId}`, JSON.stringify(invoice))
+                              // Naviguer vers la page de détails
+                              router.push(`/dashboard/invoices/${invoice.invoiceId}`)
                             }}
                           >
                             <Eye className="h-4 w-4" />
