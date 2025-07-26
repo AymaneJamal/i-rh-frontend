@@ -92,7 +92,9 @@ export const tenantApi = {
     try {
       console.log("🆕 Creating tenant:", tenantData.tenantName)
       
-      const response = await apiClient.post('/api/tenants', tenantData)
+      const response = await apiClient.post('/api/tenants', tenantData ,  {
+          includeUserEmail: true
+        })
       
       console.log("✅ Tenant created successfully:", response.data)
       return response.data

@@ -32,6 +32,12 @@ import { TenantHelpersSection } from "@/components/tenant/tenant-helpers-section
 import { EmergencyAccessModal } from "@/components/modals/emergency-access-modal"
 import { ReadOnlyModal } from "@/components/modals/read-only-modal"
 
+// Ajoutez ces imports après les autres imports existants
+import { useTenantUsers } from "@/hooks/use-tenant-users"
+import { UsersSection } from "@/components/tenant/users-section"
+import { UserDetailsModal } from "@/components/modals/user-details-modal"
+import { TenantUser } from "@/lib/api/tenant-users"
+
 
 
 import {
@@ -93,31 +99,31 @@ function parseTimestamp(timestamp: string | number): number {
  * Vérifie si une action peut être effectuée (cooldown de 5 minutes)
  */
 function canPerformAction(statusHistory: any[]): { canAct: boolean; remainingTime: number } {
-  console.log("🔍 Checking action cooldown with history:", statusHistory)
+  //console.log("🔍 Checking action cooldown with history:", statusHistory)
   
   if (!statusHistory || statusHistory.length === 0) {
-    console.log("✅ No status history - allowing action")
+    //console.log("✅ No status history - allowing action")
     return { canAct: true, remainingTime: 0 }
   }
 
   // Trouver le dernier changement de statut RÉEL (previousStatus différent de newStatus)
   const realStatusChanges = statusHistory.filter(item => {
     const hasRealChange = item.previousStatus !== item.newStatus
-    console.log("📊 History item:", {
+    /* console.log("📊 History item:", {
       previousStatus: item.previousStatus,
       newStatus: item.newStatus,
       timestamp: item.timestamp,
       reason: item.reason,
       changedBy: item.changedBy,
       isRealChange: hasRealChange
-    })
+    }) */
     return hasRealChange
   })
 
-  console.log("🔄 Real status changes found:", realStatusChanges.length)
+  //console.log("🔄 Real status changes found:", realStatusChanges.length)
 
   if (realStatusChanges.length === 0) {
-    console.log("✅ No real status changes found - allowing action")
+    //console.log("✅ No real status changes found - allowing action")
     return { canAct: true, remainingTime: 0 }
   }
 
@@ -128,7 +134,7 @@ function canPerformAction(statusHistory: any[]): { canAct: boolean; remainingTim
     return timestampB - timestampA
   })[0]
 
-  console.log("🕐 Last real change:", lastRealChange)
+  //console.log("🕐 Last real change:", lastRealChange)
 
   // Convertir le timestamp en millisecondes
   const lastChangeTime = parseTimestamp(lastRealChange.timestamp)
@@ -137,14 +143,14 @@ function canPerformAction(statusHistory: any[]): { canAct: boolean; remainingTim
   const timeSinceLastChange = currentTime - lastChangeTime
   const remainingTime = Math.max(0, cooldownPeriod - timeSinceLastChange)
 
-  console.log("⏰ Cooldown calculation:", {
+  /*console.log("⏰ Cooldown calculation:", {
     lastChangeTime: new Date(lastChangeTime).toISOString(),
     currentTime: new Date(currentTime).toISOString(),
     timeSinceLastChange: Math.floor(timeSinceLastChange / 1000) + " seconds",
     cooldownPeriod: cooldownPeriod / 1000 + " seconds",
     remainingTime: Math.floor(remainingTime / 1000) + " seconds",
     canAct: timeSinceLastChange >= cooldownPeriod
-  })
+  })*/
 
   return {
     canAct: timeSinceLastChange >= cooldownPeriod,
@@ -163,7 +169,7 @@ function getAvailableActions(status: string): {
   showReadOnly: boolean
 } {
   const normalizedStatus = status?.toUpperCase()
-  console.log("🎯 Determining actions for status:", normalizedStatus)
+  //console.log("🎯 Determining actions for status:", normalizedStatus)
 
   switch (normalizedStatus) {
     case 'CREATED':
@@ -254,13 +260,13 @@ function TenantActionCard({
     return `${minutes}:${seconds.toString().padStart(2, '0')}`
   }
 
-  console.log("🎨 Rendering TenantActionCard:", {
+  /*console.log("🎨 Rendering TenantActionCard:", {
     tenantStatus: tenant?.status,
     canAct,
     remainingTime: formatRemainingTime(remainingTime),
     actions,
     historyCount: statusHistory?.length || 0
-  })
+  })*/
 
   return (
     <Card>
@@ -442,6 +448,20 @@ export default function TenantDetailPage() {
     refreshAll: refreshHistory
   } = useTenantHistory(tenantId)
 
+  // Hook pour les utilisateurs du tenant
+  const {
+    users,
+    loading: usersLoading,
+    error: usersError,
+    totalUsers,
+    activeUsers,
+    suspendedUsers,
+    pendingUsers,
+    refresh: refreshUsers,
+    suspendUser,
+    reactivateUser
+  } = useTenantUsers(tenantId)
+
   // ===============================================================================
   // STATES POUR LES MODALES
   // ===============================================================================
@@ -456,6 +476,9 @@ export default function TenantDetailPage() {
 
 
   const [actionLoading, setActionLoading] = useState(false)
+
+  const [showUserDetailsModal, setShowUserDetailsModal] = useState(false)
+  const [selectedUser, setSelectedUser] = useState<TenantUser | null>(null)
 
   // ===============================================================================
   // HANDLERS POUR LES ACTIONS
@@ -538,6 +561,27 @@ export default function TenantDetailPage() {
       refreshSubscriptionData()
     }
   }
+
+  const handleViewUser = (user: TenantUser) => {
+  setSelectedUser(user)
+  setShowUserDetailsModal(true)
+}
+
+const handleSuspendUser = async (userId: string): Promise<boolean> => {
+  const success = await suspendUser(userId)
+  if (success) {
+    refresh() // Rafraîchir les données du tenant
+  }
+  return success
+}
+
+const handleReactivateUser = async (userId: string): Promise<boolean> => {
+  const success = await reactivateUser(userId)
+  if (success) {
+    refresh() // Rafraîchir les données du tenant
+  }
+  return success
+}
 
   // ===============================================================================
   // EARLY RETURNS
@@ -965,6 +1009,18 @@ export default function TenantDetailPage() {
                       )}
                     </CardContent>
                   </Card>
+
+
+                  <UsersSection
+                    users={users}
+                    loading={usersLoading}
+                    error={usersError}
+                    onRefresh={refreshUsers}
+                    onViewUser={handleViewUser}
+                    onSuspendUser={handleSuspendUser}
+                    onReactivateUser={handleReactivateUser}
+                  />
+
                 </div>
 
                 {/* Sidebar - Actions et Administrateur */}
@@ -1229,6 +1285,15 @@ export default function TenantDetailPage() {
         tenantName={tenant?.name || ""}
         existingPlan={tenant?.plan}
         onPlanExtended={handleExtendPlanSuccess}
+      />
+
+      <UserDetailsModal
+        isOpen={showUserDetailsModal}
+        onClose={() => {
+          setShowUserDetailsModal(false)
+          setSelectedUser(null)
+        }}
+        user={selectedUser}
       />
 
      </div>
